@@ -1,22 +1,62 @@
 # Entorno virtual
 venv/
+.venv/
+env/
+
+# Variables de entorno y secretos
 .env
+.env.local
+.env.*.local
 
-# Archivos compilados de Python
-*.pyc
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Lock files (dependencias)
-uv.lock
+# Tests y cobertura
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
 
-# Archivos de configuración locales
+# Archivos subidos y generados en runtime
+uploads/
+
+# Logs
 *.log
-*.sqlite3
+logs/
 
-# Configuración de IDEs
+# IDE y sistema operativo
 .vscode/
 .idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 
-# Archivos de pruebas
-.coverage
-pytest_cache/
+# Jupyter
+.ipynb_checkpoints/
+
+# Alembic (opcional: descomentar si no quieres versionar snapshots locales)
+# alembic/versions/*.pyc

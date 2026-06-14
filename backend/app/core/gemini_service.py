@@ -15,7 +15,7 @@ class GeminiService:
             return "Configure GEMINI_API_KEY para generar recomendaciones personalizadas."
 
         prompt = self._build_prompt(prediccion, dato_clinico)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-flash-latest")
         response = await model.generate_content_async(prompt)
         return response.text or "No fue posible generar recomendaciones."
 
