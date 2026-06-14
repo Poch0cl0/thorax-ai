@@ -1,0 +1,13 @@
+ADMIN_ROLE = "administrador"
+SECRETARY_ROLE = "secretaria"
+DOCTOR_ROLE = "medico"
+
+MANAGE_USERS = "usuarios.manage"
+MANAGE_ROLES = "roles.manage"
+MANAGE_PATIENTS = "pacientes.create"
+MANAGE_APPOINTMENTS = "citas.create"
+READ_AVAILABILITY = "disponibilidad.read"
+ATTEND_APPOINTMENTS = "citas.atender"
+MANAGE_CLINICAL_DATA = "datos_clinicos.create"
+CREATE_PREDICTIONS = "predicciones.create"
+CREATE_RECOMMENDATIONS = "recomendaciones.create"
