@@ -24,7 +24,10 @@ export function apiRoleToAppRole(
   if (
     lower === 'especialista' ||
     lower === 'clinician' ||
-    lower === 'clínico'
+    lower === 'clínico' ||
+    lower === 'medico' ||
+    lower === 'médico' ||
+    lower === 'médico especialista'
   )
     return 'especialista'
   return 'especialista'
@@ -42,7 +45,14 @@ export function mapUserRoleToAppRole(
   const lower = apiRole?.toLowerCase() ?? ''
   if (lower === 'admin') return 'admin'
   if (lower === 'secretaria' || lower === 'secretary') return 'secretaria'
-  if (lower === 'especialista' || lower === 'clinician' || lower === 'clínico')
+  if (
+    lower === 'especialista' || 
+    lower === 'clinician' || 
+    lower === 'clínico' ||
+    lower === 'medico' ||
+    lower === 'médico' ||
+    lower === 'médico especialista'
+  )
     return 'especialista'
   if (email && isClinicalMock()) {
     const demo = getMockClinicalSnapshot().demo_users[email.toLowerCase()]
@@ -109,14 +119,13 @@ export function deriveViewModel(data: import('../types/clinical-domain').DemoCli
 function patientFromApi(p: ApiPatient): PatientRecord {
   return {
     id: String(p.id),
-    full_name: p.display_name,
-    dni:
-      p.external_ref && /^\d{8}$/.test(p.external_ref) ? p.external_ref : null,
-    birth_date: p.birth_date,
-    gender: null,
-    phone: null,
-    email: null,
-    conditions_summary: p.notes,
+    full_name: `${p.nombres} ${p.apellidos}`.trim(),
+    dni: p.dni,
+    birth_date: p.fecha_nacimiento,
+    gender: p.sexo,
+    phone: p.telefono,
+    email: p.email,
+    address: p.direccion,
   }
 }
 

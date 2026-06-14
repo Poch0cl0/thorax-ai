@@ -7,6 +7,7 @@ class PrediccionRequest(BaseModel):
     paciente_id: int
     medico_id: int | None = None
     datos_clinicos_id: int | None = None
+    cita_id: int | None = None
     modelo: str = "lr"
 
 
@@ -15,6 +16,7 @@ class PrediccionRead(BaseModel):
     paciente_id: int
     medico_id: int | None = None
     datos_clinicos_id: int | None = None
+    cita_id: int | None = None
     modelo_utilizado: str
     probabilidad: float
     clase_predicha: str

@@ -10,8 +10,11 @@ import {
   Play,
   Trash2,
   X,
+  Upload
 } from 'lucide-react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useClinicalViewModel } from '../hooks/useClinicalViewModel'
+import { useAuth } from '../context/useAuth'
 import { StatCard } from '../components/ui/StatCard'
 import { AppBadge } from '../components/ui/AppBadge'
 import { isClinicalMock } from '../services/clinicalRepository'
@@ -50,13 +53,16 @@ function findingDisplay(label: string): string {
 function DetailModal({
   prediction,
   onClose,
+  vm,
 }: {
   prediction: Prediction
   onClose: () => void
+  vm: ReturnType<typeof useClinicalViewModel>['vm']
 }) {
   const d = prediction.details as Record<string, unknown> | null
   const mode = d?.mode as string | undefined
   const isReal = mode === 'real'
+  const navigate = useNavigate()
 
   const probCancer = isReal
     ? (prediction.risk_score ?? 0)
@@ -155,6 +161,21 @@ function DetailModal({
                       style={{ width: `${probNormal * 100}%` }}
                     />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const study = vm?.studies.find(s => s.id === prediction.study_id.toString())
+                      const patientId = study?.patient_id
+                      if (patientId) {
+                        navigate(`/recommendations/new?patient_id=${patientId}&prediction_id=${prediction.id}`)
+                      } else {
+                        alert('No se pudo determinar el paciente de este estudio.')
+                      }
+                    }}
+                    className="inline-flex items-center justify-end gap-1 text-thorax-text hover:text-thorax-accent disabled:opacity-50 mt-1"
+                  >
+                    Generar Recomendación
+                  </button>
                 </div>
               </div>
             </div>
@@ -244,6 +265,7 @@ function DetailModal({
 // Page
 // ---------------------------------------------------------------------------
 export function PredictionsPage() {
+  const { user } = useAuth()
   const {
     vm,
     loading,
@@ -263,6 +285,12 @@ export function PredictionsPage() {
 
   const [detailPrediction, setDetailPrediction] = useState<Prediction | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const patientIdFromQuery = searchParams.get('patient_id')
+  const [file, setFile] = useState<File | null>(null)
+  const [uploadModelType, setUploadModelType] = useState<'random_forest' | 'logistic_regression'>('random_forest')
 
   const stats = useMemo(() => {
     if (!vm) return { total: 0, pending: 0, reviewed: 0, critical: 0 }
@@ -356,68 +384,118 @@ export function PredictionsPage() {
         <StatCard label="Críticos" value={stats.critical} icon={AlertCircle} variant="danger" />
       </div>
 
-      {/* Ejecutar inferencia */}
-      <div className="rounded-xl border border-thorax-border bg-thorax-card p-6">
-        <h2 className="text-lg font-semibold text-thorax-text">Ejecutar inferencia</h2>
-        <p className="mt-1 text-sm text-thorax-muted">
-          {mode === 'mock'
-            ? 'Modo demo: añade una predicción al estudio seleccionado.'
-            : 'Genera una predicción sobre un estudio existente.'}
-        </p>
-        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-end">
-          <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm text-thorax-muted">
-            Estudio
-            <select
-              value={studyId}
-              onChange={(e) => setStudyId(e.target.value)}
-              className="rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-thorax-text outline-none focus:ring-1 focus:ring-thorax-accent"
-            >
-              <option value="">Seleccionar estudio…</option>
-              {vm.studies.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.description ?? s.study_type} (#{s.id.slice(0, 8)})
-                </option>
-              ))}
-            </select>
-          </label>
-          {mode === 'mock' && (
-            <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm text-thorax-muted">
-              Hallazgo (etiqueta)
-              <input
-                value={findingLabel}
-                onChange={(e) => setFindingLabel(e.target.value)}
-                className="rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-thorax-text outline-none focus:ring-1 focus:ring-thorax-accent"
-              />
+      {patientIdFromQuery ? (
+        <div className="rounded-xl border border-thorax-border bg-thorax-card p-6 shadow-sm">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-thorax-text">
+            <Upload className="h-5 w-5 text-thorax-accent" /> Nueva imagen y predicción
+          </h2>
+          <p className="mt-1 text-sm text-thorax-muted">
+            Sube una radiografía para ejecutar el modelo estadístico.
+          </p>
+          <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={async (e) => {
+            e.preventDefault()
+            if (!file) return
+            setRunBusy(true)
+            setRunError(null)
+            try {
+              const u = await import('../services/clinicalService')
+              await u.createPredictionDirectly({
+                patient_id: Number(patientIdFromQuery),
+                medico_id: user?.id || 1,
+                model_type: uploadModelType,
+                file
+              })
+              await refreshApi()
+              navigate('/predictions') // clear query params
+            } catch (err) {
+              setRunError(err instanceof Error ? err.message : 'Error al analizar')
+            } finally {
+              setRunBusy(false)
+            }
+          }}>
+            <label className="flex flex-col gap-1 text-sm text-thorax-muted">
+              Radiografía (PNG/JPG)
+              <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} className="rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-thorax-text" />
             </label>
-          )}
-          <button
-            type="button"
-            disabled={runBusy || studyId === ''}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-thorax-accent px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-thorax-accent-hover disabled:opacity-50"
-            onClick={() => {
-              setRunError(null)
-              setRunBusy(true)
-              void (async () => {
-                try {
-                  if (mode === 'mock') {
-                    runPredictionDemo(studyId, findingLabel.trim() || 'Hallazgo')
-                  } else {
-                    await runPredictionApi(Number(studyId))
-                  }
-                } catch (e) {
-                  setRunError(e instanceof Error ? e.message : 'No se pudo ejecutar')
-                } finally {
-                  setRunBusy(false)
-                }
-              })()
-            }}
-          >
-            <Play className="h-4 w-4 fill-current" />
-            {runBusy ? 'Procesando…' : 'Ejecutar inferencia'}
-          </button>
+            <label className="flex flex-col gap-1 text-sm text-thorax-muted">
+              Modelo
+              <select value={uploadModelType} onChange={e => setUploadModelType(e.target.value as any)} className="rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2.5 text-thorax-text">
+                <option value="random_forest">Random Forest</option>
+                <option value="logistic_regression">Regresión Logística</option>
+              </select>
+            </label>
+            <div className="col-span-full">
+              <button disabled={runBusy || !file} type="submit" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-thorax-accent px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-thorax-accent-hover disabled:opacity-50">
+                {runBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Analizar Imagen
+              </button>
+            </div>
+            {runError && <p className="col-span-full text-sm text-thorax-danger">{runError}</p>}
+          </form>
         </div>
-        {runError && <p className="mt-3 text-sm text-thorax-danger">{runError}</p>}
-      </div>
+      ) : (
+        <div className="rounded-xl border border-thorax-border bg-thorax-card p-6">
+          <h2 className="text-lg font-semibold text-thorax-text">Ejecutar inferencia</h2>
+          <p className="mt-1 text-sm text-thorax-muted">
+            {mode === 'mock'
+              ? 'Modo demo: añade una predicción al estudio seleccionado.'
+              : 'Genera una predicción sobre un estudio existente.'}
+          </p>
+          <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-end">
+            <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm text-thorax-muted">
+              Estudio
+              <select
+                value={studyId}
+                onChange={(e) => setStudyId(e.target.value)}
+                className="rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-thorax-text outline-none focus:ring-1 focus:ring-thorax-accent"
+              >
+                <option value="">Seleccionar estudio…</option>
+                {vm.studies.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.description ?? s.study_type} (#{s.id.slice(0, 8)})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {mode === 'mock' && (
+              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm text-thorax-muted">
+                Hallazgo (etiqueta)
+                <input
+                  value={findingLabel}
+                  onChange={(e) => setFindingLabel(e.target.value)}
+                  className="rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-thorax-text outline-none focus:ring-1 focus:ring-thorax-accent"
+                />
+              </label>
+            )}
+            <button
+              type="button"
+              disabled={runBusy || studyId === ''}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-thorax-accent px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-thorax-accent-hover disabled:opacity-50"
+              onClick={() => {
+                setRunError(null)
+                setRunBusy(true)
+                void (async () => {
+                  try {
+                    if (mode === 'mock') {
+                      runPredictionDemo(studyId, findingLabel.trim() || 'Hallazgo')
+                    } else {
+                      await runPredictionApi(Number(studyId))
+                    }
+                  } catch (e) {
+                    setRunError(e instanceof Error ? e.message : 'No se pudo ejecutar')
+                  } finally {
+                    setRunBusy(false)
+                  }
+                })()
+              }}
+            >
+              <Play className="h-4 w-4 fill-current" />
+              {runBusy ? 'Procesando…' : 'Ejecutar inferencia'}
+            </button>
+          </div>
+          {runError && <p className="mt-3 text-sm text-thorax-danger">{runError}</p>}
+        </div>
+      )}
 
       {/* Lista de predicciones */}
       <div className="space-y-3">
@@ -500,6 +578,7 @@ export function PredictionsPage() {
         <DetailModal
           prediction={detailPrediction}
           onClose={() => setDetailPrediction(null)}
+          vm={vm}
         />
       )}
     </div>

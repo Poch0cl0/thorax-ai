@@ -80,7 +80,7 @@ export function useClinicalViewModel() {
         gender: null,
         phone: null,
         email: input.email ?? null,
-        conditions_summary: input.conditions_summary?.trim() || null,
+        address: null
       })
     },
     [mock],
@@ -92,13 +92,20 @@ export function useClinicalViewModel() {
       dni?: string | null
       birth_date?: string | null
       email?: string | null
-      conditions_summary?: string | null
     }) => {
+      // Split full_name naively
+      const parts = input.full_name.split(' ')
+      const nombres = parts[0] || 'Nuevo'
+      const apellidos = parts.slice(1).join(' ') || 'Paciente'
       await clinicalService.createPatient({
-        display_name: input.full_name,
-        external_ref: input.dni && input.dni.length > 0 ? input.dni : null,
-        birth_date: input.birth_date ?? null,
-        notes: input.conditions_summary ?? null,
+        nombres,
+        apellidos,
+        dni: input.dni && input.dni.length > 0 ? input.dni : null,
+        fecha_nacimiento: input.birth_date ?? null,
+        email: input.email ?? null,
+        sexo: 'M',
+        telefono: null,
+        direccion: null
       })
       await refreshApi()
     },

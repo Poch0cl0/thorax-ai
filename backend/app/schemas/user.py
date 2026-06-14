@@ -15,6 +15,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    medico_cmp: str | None = None
+    medico_especialidad: str | None = "Neumologia"
 
 
 class UserUpdate(BaseModel):

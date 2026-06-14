@@ -1,6 +1,6 @@
-ADMIN_ROLE = "administrador"
+ADMIN_ROLE = "admin"
 SECRETARY_ROLE = "secretaria"
-DOCTOR_ROLE = "medico"
+DOCTOR_ROLE = "especialista"
 
 MANAGE_USERS = "usuarios.manage"
 MANAGE_ROLES = "roles.manage"

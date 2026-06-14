@@ -21,3 +21,4 @@ class Cita(Base):
 
     paciente = relationship("Paciente", back_populates="citas", lazy="selectin")
     medico = relationship("Medico", back_populates="citas", lazy="selectin")
+    predicciones = relationship("Prediccion", back_populates="cita", lazy="selectin")

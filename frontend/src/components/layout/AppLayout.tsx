@@ -44,8 +44,10 @@ export function AppLayout() {
 
   const navEspecialista: NavLinkItem[] = [
     { to: '/', end: true, label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/attend-queue', label: 'Atender citas', icon: CalendarCheck2 },
-    { to: '/predictions', label: 'Predicciones IA', icon: Activity },
+    { to: '/patients', label: 'Pacientes', icon: Users },
+    { to: '/attend-queue', label: 'Citas', icon: CalendarCheck2 },
+    { to: '/agenda', label: 'Agenda', icon: CalendarDays },
+    { to: '/scan', label: 'Análisis IA', icon: Activity },
   ]
 
   const navSecretaria: NavLinkItem[] = [
@@ -59,10 +61,13 @@ export function AppLayout() {
   else if (role === 'admin')
     links = [
       { to: '/', end: true, label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/users', label: 'Usuarios', icon: Users },
+      { to: '/roles', label: 'Roles y Permisos', icon: Users },
+      { to: '/medicos', label: 'Médicos', icon: Users },
       { to: '/patients', label: 'Pacientes', icon: Users },
       { to: '/appointments', label: 'Citas', icon: CalendarDays },
       { to: '/attend-queue', label: 'Atender citas', icon: CalendarCheck2 },
-      { to: '/predictions', label: 'Predicciones IA', icon: Activity },
+      { to: '/agenda', label: 'Agenda', icon: CalendarDays },
       { to: '/scan', label: 'Análisis IA', icon: Activity },
     ]
   else links = navEspecialista

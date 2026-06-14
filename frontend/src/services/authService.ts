@@ -34,12 +34,8 @@ export function logout() {
 }
 
 export async function fetchCurrentUser(): Promise<User> {
-  const data = await apiFetch<User>('/api/v1/auth/me')
-  const roles =
-    Array.isArray(data.roles) && data.roles.length > 0
-      ? [...data.roles]
-      : data.role
-        ? [data.role]
-        : ['clinician']
-  return { ...data, roles }
+  const data = await apiFetch<any>('/api/v1/auth/me')
+  const roleName = data.rol?.nombre?.toLowerCase() || data.role?.toLowerCase() || 'clinician'
+  const roles = Array.isArray(data.roles) && data.roles.length > 0 ? [...data.roles] : [roleName]
+  return { ...data, role: roleName, roles }
 }

@@ -31,17 +31,17 @@ class AnalisisResultado(BaseModel):
 @router.get("/modelos", response_model=ModelosDisponibles)
 async def get_modelos():
     return ModelosDisponibles(
-        available_models=["random_forest", "logistic_regression"],
+        available_models=["logistic_regression", "random_forest"],
         model_options=[
-            ModeloInfo(value="random_forest", label="Random Forest", description="Alta precisión (50 árboles)"),
             ModeloInfo(value="logistic_regression", label="Reg. Logística", description="Rápido e interpretable"),
+            ModeloInfo(value="random_forest", label="Random Forest", description="Alta precisión (50 árboles)"),
         ]
     )
 
 @router.post("/analizar", response_model=AnalisisResultado)
 async def analizar_imagen(
     file: UploadFile = File(...),
-    model_type: str = Form("random_forest")
+    model_type: str = Form("logistic_regression")
 ):
     original_path = await file_storage.save_upload(file)
     processed_path = file_storage.processed_image_path()

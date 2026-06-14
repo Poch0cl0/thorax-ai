@@ -58,7 +58,7 @@ export function StudiesPage() {
             <option value="">— Elegir —</option>
             {patients.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.display_name} (ID {p.id})
+                {p?.nombres} {p?.apellidos}
               </option>
             ))}
           </select>

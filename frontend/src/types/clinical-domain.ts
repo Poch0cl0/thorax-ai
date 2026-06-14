@@ -18,7 +18,7 @@ export type PatientRecord = {
   gender: string | null
   phone: string | null
   email: string | null
-  conditions_summary: string | null
+  address: string | null
 }
 
 export type SpecialistRecord = {
@@ -38,6 +38,7 @@ export type AppointmentRecord = {
   scheduled_at: string
   status: AppointmentStatus
   notes: string | null
+  predicciones?: any[]
 }
 
 export type StudyRecord = {

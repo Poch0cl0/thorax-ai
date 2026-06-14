@@ -11,6 +11,11 @@ import { StudiesPage } from '../pages/StudiesPage'
 import { AppointmentsPage } from '../pages/AppointmentsPage'
 import { AttendQueuePage } from '../pages/AttendQueuePage'
 import { ScanPage } from '../pages/ScanPage'
+import { AgendaPage } from '../pages/AgendaPage'
+import { UsersPage } from '../pages/admin/UsersPage'
+import { RolesPage } from '../pages/admin/RolesPage'
+import { MedicosPage } from '../pages/admin/MedicosPage'
+import { PatientProfilePage } from '../pages/PatientProfilePage'
 
 export function AppRoutes() {
   return (
@@ -35,10 +40,10 @@ export function AppRoutes() {
               }
             />
             <Route
-              path="/predictions"
+              path="/patients/:id"
               element={
-                <RoleGate allow={['especialista', 'admin']}>
-                  <PredictionsPage />
+                <RoleGate allow={['especialista', 'secretaria', 'admin']}>
+                  <PatientProfilePage />
                 </RoleGate>
               }
             />
@@ -51,6 +56,14 @@ export function AppRoutes() {
               }
             />
             <Route
+              path="/agenda"
+              element={
+                <RoleGate allow={['especialista', 'admin']}>
+                  <AgendaPage />
+                </RoleGate>
+              }
+            />
+            <Route
               path="/appointments"
               element={
                 <RoleGate allow={['secretaria', 'admin']}>
@@ -58,12 +71,34 @@ export function AppRoutes() {
                 </RoleGate>
               }
             />
-            <Route path="/studies" element={<StudiesPage />} />
-            <Route path="/predict" element={<Navigate to="/predictions" replace />} />
+            <Route
+              path="/users"
+              element={
+                <RoleGate allow={['admin']}>
+                  <UsersPage />
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/roles"
+              element={
+                <RoleGate allow={['admin']}>
+                  <RolesPage />
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/medicos"
+              element={
+                <RoleGate allow={['admin']}>
+                  <MedicosPage />
+                </RoleGate>
+              }
+            />
             <Route
               path="/scan"
               element={
-                <RoleGate allow={['admin']}>
+                <RoleGate allow={['especialista', 'admin']}>
                   <ScanPage />
                 </RoleGate>
               }

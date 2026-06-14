@@ -29,10 +29,14 @@ export type AppointmentApi = {
 
 export type Patient = {
   id: number
-  external_ref: string | null
-  display_name: string
-  birth_date: string | null
-  notes: string | null
+  dni: string | null
+  nombres: string
+  apellidos: string
+  fecha_nacimiento: string | null
+  sexo: string | null
+  telefono: string | null
+  email: string | null
+  direccion: string | null
   created_at: string
 }
 

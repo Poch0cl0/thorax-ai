@@ -11,7 +11,7 @@ from app.models.rol import Rol
 from app.models.usuario import Usuario
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
 
 @router.get("", response_model=list[UserRead], dependencies=[Depends(require_roles(ADMIN_ROLE))])
@@ -30,7 +30,11 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)) -
     if role and role.nombre == DOCTOR_ROLE:
         existing = await db.execute(select(Medico).where(Medico.usuario_id == user.id))
         if existing.scalar_one_or_none() is None:
-            db.add(Medico(usuario_id=user.id))
+            db.add(Medico(
+                usuario_id=user.id,
+                cmp=payload.medico_cmp,
+                especialidad=payload.medico_especialidad
+            ))
 
     await db.commit()
     await db.refresh(user)
@@ -64,10 +68,10 @@ async def update_user(user_id: int, payload: UserUpdate, db: AsyncSession = Depe
 
 
 @router.delete("/{user_id}", dependencies=[Depends(require_roles(ADMIN_ROLE))])
-async def deactivate_user(user_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     user = await db.get(Usuario, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    user.activo = False
+    await db.delete(user)
     await db.commit()
-    return {"message": "User deactivated"}
+    return {"message": "User deleted"}

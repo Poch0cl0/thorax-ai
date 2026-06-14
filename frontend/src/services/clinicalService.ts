@@ -9,14 +9,7 @@ import { apiFetch, getApiBase } from './api'
 
 // Backend PacienteRead -> Frontend Patient
 function mapPatient(p: any): Patient {
-  return {
-    id: p.id,
-    external_ref: p.dni || null,
-    display_name: `${p.nombres} ${p.apellidos}`.trim(),
-    birth_date: p.fecha_nacimiento || null,
-    notes: p.direccion || p.telefono || null,
-    created_at: p.created_at,
-  }
+  return p as Patient
 }
 
 export async function listPatients(): Promise<Patient[]> {
@@ -24,21 +17,16 @@ export async function listPatients(): Promise<Patient[]> {
   return data.map(mapPatient)
 }
 
-export async function createPatient(body: {
-  display_name: string
-  external_ref?: string | null
-  birth_date?: string | null
-  notes?: string | null
-}): Promise<Patient> {
-  const parts = body.display_name.trim().split(' ')
-  const nombres = parts[0] || 'Desconocido'
-  const apellidos = parts.length > 1 ? parts.slice(1).join(' ') : 'Desconocido'
+export async function createPatient(body: Partial<Patient>): Promise<Patient> {
   const payload = {
-    nombres,
-    apellidos,
-    dni: body.external_ref || null,
-    fecha_nacimiento: body.birth_date || null,
-    direccion: body.notes || null,
+    nombres: body.nombres || 'Desconocido',
+    apellidos: body.apellidos || 'Desconocido',
+    dni: body.dni || null,
+    fecha_nacimiento: body.fecha_nacimiento || null,
+    sexo: body.sexo || null,
+    telefono: body.telefono || null,
+    email: body.email || null,
+    direccion: body.direccion || null,
   }
   const res = await apiFetch<any>('/api/v1/pacientes', {
     method: 'POST',
@@ -47,6 +35,44 @@ export async function createPatient(body: {
   return mapPatient(res)
 }
 
+export async function updatePatient(id: number, body: Partial<Patient>): Promise<Patient> {
+  const payload = {
+    nombres: body.nombres || undefined,
+    apellidos: body.apellidos || undefined,
+    dni: body.dni || undefined,
+    fecha_nacimiento: body.fecha_nacimiento || undefined,
+    sexo: body.sexo || undefined,
+    telefono: body.telefono || undefined,
+    email: body.email || undefined,
+    direccion: body.direccion || undefined,
+  }
+  const res = await apiFetch<any>(`/api/v1/pacientes/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  return mapPatient(res)
+}
+
+export async function deletePatient(id: number): Promise<void> {
+  await apiFetch<void>(`/api/v1/pacientes/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+type AppointmentApi = {
+  id: string
+  patient_id: string
+  attending_user_id: string | null
+  scheduled_at: string
+  status: string
+  notes: string | null
+  created_by_id: string | null
+  created_at: string
+  updated_at: string
+  predicciones?: any[]
+}
+
+// ... in listAppointments
 export async function listClinicians(): Promise<UserBrief[]> {
   const data = await apiFetch<any[]>('/api/v1/medicos')
   return data.map(m => ({
@@ -69,6 +95,7 @@ function mapAppointment(c: any): AppointmentApi {
     created_by_id: null,
     created_at: c.created_at,
     updated_at: c.created_at,
+    predicciones: c.predicciones,
   }
 }
 
@@ -182,12 +209,14 @@ export async function createStudyWithImage(_body: {
 export async function createPredictionDirectly(body: {
   patient_id: number
   medico_id: number
+  cita_id?: number
   model_type: string
   file: File
 }): Promise<Prediction> {
   const fd = new FormData()
   fd.set('paciente_id', String(body.patient_id))
   fd.set('medico_id', String(body.medico_id))
+  if (body.cita_id) fd.set('cita_id', String(body.cita_id))
   fd.set('modelo', body.model_type === 'random_forest' ? 'rf' : 'lr')
   fd.set('radiografia', body.file)
 
@@ -196,6 +225,18 @@ export async function createPredictionDirectly(body: {
     body: fd,
   })
   return mapPrediction(p)
+}
+
+export async function sendAiDiagnosis(predictionId: number): Promise<void> {
+  // First, generate the recommendation to make sure it exists
+  const rec = await apiFetch<any>(`/api/v1/recomendaciones/predicciones/${predictionId}`, {
+    method: 'POST'
+  })
+  
+  // Then send it by email
+  await apiFetch(`/api/v1/recomendaciones/${rec.id}/enviar-email`, {
+    method: 'POST'
+  })
 }
 
 export async function runPrediction(_studyId: number, _modelType?: string): Promise<Prediction> {

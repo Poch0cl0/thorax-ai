@@ -21,10 +21,10 @@ export function PatientList({ patients, onSelect, selectedId }: Props) {
             }
             onClick={() => onSelect?.(p)}
           >
-            <span className="title">{p.display_name}</span>
+            <span className="title">{p.nombres} {p.apellidos}</span>
             <span className="meta">
               ID {p.id}
-              {p.external_ref ? ` · Ref: ${p.external_ref}` : ''}
+              {p.dni ? ` · DNI: ${p.dni}` : ''}
             </span>
           </button>
         </li>

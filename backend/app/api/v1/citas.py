@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.permisos import ADMIN_ROLE, DOCTOR_ROLE, SECRETARY_ROLE
@@ -22,7 +23,7 @@ async def list_appointments(
     fecha_hasta: datetime | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[Cita]:
-    query = select(Cita)
+    query = select(Cita).options(selectinload(Cita.predicciones))
     if paciente_id is not None:
         query = query.where(Cita.paciente_id == paciente_id)
     if medico_id is not None:

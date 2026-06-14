@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
-
+from app.schemas.prediccion import PrediccionRead
 
 class CitaBase(BaseModel):
     paciente_id: int
@@ -29,5 +29,6 @@ class CitaRead(CitaBase):
     id: int
     estado: str
     created_at: datetime
+    predicciones: list[PrediccionRead] = []
 
     model_config = ConfigDict(from_attributes=True)

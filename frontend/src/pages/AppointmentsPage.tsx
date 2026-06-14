@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import * as agendaService from '../services/agendaService'
 import {
   ChevronLeft,
   ChevronRight,
@@ -7,6 +8,9 @@ import {
   Trash2,
   User,
   X,
+  Edit,
+  Send,
+  Loader2,
 } from 'lucide-react'
 import { useClinicalViewModel } from '../hooks/useClinicalViewModel'
 import * as clinicalService from '../services/clinicalService'
@@ -31,23 +35,6 @@ const MONTHS = [
 ]
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
-
-const TIME_SLOTS = [
-  '08:00',
-  '08:30',
-  '09:00',
-  '09:30',
-  '10:00',
-  '10:30',
-  '11:00',
-  '11:30',
-  '14:00',
-  '14:30',
-  '15:00',
-  '15:30',
-  '16:00',
-  '16:30',
-]
 
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -81,11 +68,26 @@ export function AppointmentsPage() {
   })
 
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [sendingId, setSendingId] = useState<string | null>(null)
   const [patientId, setPatientId] = useState('')
   const [specialistId, setSpecialistId] = useState('')
   const [dateStr, setDateStr] = useState('')
   const [timeStr, setTimeStr] = useState('')
   const [notes, setNotes] = useState('')
+  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!specialistId || !dateStr) {
+      setAvailableSlots([])
+      return
+    }
+    agendaService.listDisponibilidad({ medico_id: Number(specialistId), fecha: dateStr, disponible: true })
+      .then(slots => {
+        setAvailableSlots(slots.map((s: any) => s.hora_inicio.slice(0, 5)))
+      })
+      .catch(console.error)
+  }, [specialistId, dateStr])
 
   const calYear = viewMonth.getFullYear()
   const calMonth = viewMonth.getMonth()
@@ -225,6 +227,7 @@ export function AppointmentsPage() {
             <button
               type="button"
               onClick={() => {
+                setEditingId(null)
                 setShowForm(true)
                 const d =
                   selectedDay != null
@@ -233,6 +236,7 @@ export function AppointmentsPage() {
                 setDateStr(d.toISOString().slice(0, 10))
                 if (vm.specialists[0]) setSpecialistId(vm.specialists[0].id)
                 if (vm.patients[0]) setPatientId(vm.patients[0].id)
+                setNotes('')
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-thorax-accent px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-thorax-accent-hover"
             >
@@ -270,27 +274,69 @@ export function AppointmentsPage() {
                       {sp?.display_name ?? 'Sin asignar'}
                     </p>
                   </div>
-                  {mode === 'api' && a.status === 'pendiente' && (
-                    <button
-                      type="button"
-                      className="self-start text-thorax-muted hover:text-thorax-danger disabled:opacity-40"
-                      title="Eliminar cita pendiente"
-                      aria-label={`Eliminar cita ${a.id}`}
-                      onClick={() =>
-                        window.confirm(
-                          '¿Eliminar esta cita pendiente?',
-                        ) &&
-                        void (async () => {
-                          await clinicalService.deleteAppointment(
-                            Number.parseInt(a.id, 10),
-                          ).catch(() => {})
-                          await refreshApi()
-                        })()
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 self-start">
+                    {mode === 'api' && a.status === 'pendiente' && (
+                      <button
+                        type="button"
+                        className="text-thorax-muted hover:text-thorax-accent disabled:opacity-40"
+                        title="Editar cita"
+                        aria-label={`Editar cita ${a.id}`}
+                        onClick={() => {
+                          setEditingId(a.id)
+                          setPatientId(a.patient_id)
+                          setSpecialistId(a.specialist_id || '')
+                          const t = new Date(a.scheduled_at)
+                          setDateStr(t.toISOString().slice(0, 10))
+                          setTimeStr(t.toTimeString().slice(0, 5))
+                          setNotes(a.notes || '')
+                          setShowForm(true)
+                        }}
+                      >
+                        <Edit className="h-4 w-4" strokeWidth={1.75} />
+                      </button>
+                    )}
+                    {mode === 'api' && a.status === 'pendiente' && (
+                      <button
+                        type="button"
+                        className="text-thorax-muted hover:text-thorax-danger disabled:opacity-40"
+                        title="Eliminar cita pendiente"
+                        aria-label={`Eliminar cita ${a.id}`}
+                        onClick={() =>
+                          window.confirm(
+                            '¿Eliminar esta cita pendiente?',
+                          ) &&
+                          void (async () => {
+                            await clinicalService.deleteAppointment(
+                              Number.parseInt(a.id, 10),
+                            ).catch(() => {})
+                            await refreshApi()
+                          })()
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                      </button>
+                    )}
+                    {mode === 'api' && a.status === 'atendida' && a.predicciones && a.predicciones.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-thorax-accent hover:text-thorax-accent-hover disabled:opacity-40"
+                        title="Enviar Informe IA"
+                        aria-label={`Enviar Informe IA ${a.id}`}
+                        disabled={sendingId === a.id}
+                        onClick={() => {
+                          const predId = a.predicciones?.[0]?.id;
+                          if (!predId) return;
+                          setSendingId(a.id)
+                          clinicalService.sendAiDiagnosis(predId)
+                            .then(() => alert('Informe IA enviado correctamente al correo.'))
+                            .catch(() => alert('Error al enviar informe IA.'))
+                            .finally(() => setSendingId(null))
+                        }}
+                      >
+                        {sendingId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" strokeWidth={1.75} />}
+                      </button>
+                    )}
+                  </div>
                 </li>
               )
             })}
@@ -314,7 +360,7 @@ export function AppointmentsPage() {
           <div className="relative z-20 w-full max-w-md rounded-2xl border border-thorax-border bg-thorax-card-alt p-6 shadow-xl">
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-lg font-semibold text-thorax-text">
-                Nueva Cita
+                {editingId ? 'Editar Cita' : 'Nueva Cita'}
               </h3>
               <button
                 type="button"
@@ -344,16 +390,25 @@ export function AppointmentsPage() {
                     })
                   } else {
                     try {
-                      await clinicalService.createAppointment({
-                        patient_id: Number.parseInt(patientId, 10),
-                        attending_user_id: Number.parseInt(
-                          specialistId,
-                          10,
-                        ),
-                        scheduled_at: dt.toISOString(),
-                        notes: notes.trim() || null,
-                        status: 'pendiente',
-                      })
+                      if (editingId) {
+                        await clinicalService.updateAppointment(Number.parseInt(editingId, 10), {
+                          patient_id: Number.parseInt(patientId, 10),
+                          attending_user_id: Number.parseInt(specialistId, 10),
+                          scheduled_at: dt.toISOString(),
+                          notes: notes.trim() || null,
+                        })
+                      } else {
+                        await clinicalService.createAppointment({
+                          patient_id: Number.parseInt(patientId, 10),
+                          attending_user_id: Number.parseInt(
+                            specialistId,
+                            10,
+                          ),
+                          scheduled_at: dt.toISOString(),
+                          notes: notes.trim() || null,
+                          status: 'pendiente',
+                        })
+                      }
                       await refreshApi()
                     } catch {
                       window.alert(
@@ -402,12 +457,15 @@ export function AppointmentsPage() {
                   className="rounded-xl border border-thorax-border bg-thorax-bg-deep px-3 py-2.5 text-sm normal-case text-thorax-text outline-none focus:ring-1 focus:ring-thorax-accent"
                 >
                   <option value="">Seleccionar hora…</option>
-                  {TIME_SLOTS.map((t) => (
+                  {availableSlots.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
                   ))}
                 </select>
+                {availableSlots.length === 0 && specialistId && dateStr && (
+                  <span className="text-[10px] text-thorax-danger">No hay disponibilidad en esta fecha.</span>
+                )}
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-thorax-muted">
                 Tipo de consulta
@@ -439,7 +497,7 @@ export function AppointmentsPage() {
                   type="submit"
                   className="flex-1 rounded-xl bg-thorax-accent py-2.5 text-sm font-semibold text-slate-900 hover:bg-thorax-accent-hover"
                 >
-                  Agendar cita
+                  {editingId ? 'Guardar Cambios' : 'Agendar cita'}
                 </button>
                 <button
                   type="button"

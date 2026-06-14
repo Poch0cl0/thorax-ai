@@ -10,7 +10,7 @@ const STORAGE_KEY = 'thorax_clinical_demo_v1'
 const listeners = new Set<() => void>()
 
 function cloneSeed(): DemoClinicalSeed {
-  return structuredClone(seed) as DemoClinicalSeed
+  return structuredClone(seed) as unknown as DemoClinicalSeed
 }
 
 function loadFromStorage(): DemoClinicalSeed | null {

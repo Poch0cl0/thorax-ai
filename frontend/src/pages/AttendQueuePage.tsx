@@ -16,6 +16,7 @@ import type {
   AppointmentStatus,
 } from '../types/clinical-domain'
 import * as clinicalService from '../services/clinicalService'
+import { AttendAppointmentModal } from '../features/appointments/AttendAppointmentModal'
 
 function isOpenStatus(status: AppointmentStatus): boolean {
   return status === 'pendiente' || status === 'en_proceso'
@@ -28,12 +29,9 @@ export function AttendQueuePage() {
 
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const [uploadFor, setUploadFor] = useState<AppointmentRecord | null>(null)
-  const [file, setFile] = useState<File | null>(null)
-  const [modality, setModality] = useState('radiografia')
-  const [studyNote, setStudyNote] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [modelType, setModelType] = useState<'random_forest' | 'logistic_regression'>('random_forest')
+  
+  // For AttendAppointmentModal
+  const [attendModalFor, setAttendModalFor] = useState<{ appointment: AppointmentRecord; patientName: string } | null>(null)
 
   const patientById = useMemo(() => {
     const m = new Map<string, string>()
@@ -93,54 +91,7 @@ export function AttendQueuePage() {
     }
   }
 
-  async function submitUpload(e: React.FormEvent) {
-    e.preventDefault()
-    if (
-      mode === 'mock' ||
-      !uploadFor ||
-      !file ||
-      !user ||
-      user.id <= 0
-    ) {
-      setMessage(
-        'Subida y predicción requieren API real e inicio de sesión con cuenta del sistema.',
-      )
-      return
-    }
 
-    const patientIdNum = Number.parseInt(uploadFor.patient_id, 10)
-    const apptNum = Number.parseInt(uploadFor.id, 10)
-    if (
-      !Number.isFinite(patientIdNum) ||
-      !Number.isFinite(apptNum)
-    )
-      return
-
-    setUploading(true)
-    setMessage(null)
-    try {
-      await clinicalService.createPredictionDirectly({
-        patient_id: patientIdNum,
-        medico_id: user.id,
-        model_type: modelType,
-        file,
-      })
-      await refreshApi()
-      setUploadFor(null)
-      setFile(null)
-      setStudyNote('')
-      setMessage(
-        'Estudio cargado y análisis de apoyo ejecutado (no sustituye criterio clínico).',
-      )
-      window.setTimeout(() => setMessage(null), 7500)
-    } catch {
-      setMessage(
-        'Error al subir o al ejecutar predicción. Comprueba imagen PNG/JPEG y permisos de médico.',
-      )
-    } finally {
-      setUploading(false)
-    }
-  }
 
   if (loading || !vm || !user) {
     return (
@@ -227,71 +178,23 @@ export function AttendQueuePage() {
                       type="button"
                       disabled={
                         pend ||
-                        uploading ||
                         mode === 'mock' ||
                         user.id <= 0
                       }
-                      onClick={() =>
-                        specOk &&
-                        void patchStatus(a, 'en_proceso')
-                      }
+                      onClick={() => {
+                        if (!specOk) return
+                        setAttendModalFor({ appointment: a, patientName })
+                      }}
                       className="flex items-center gap-1.5 rounded-lg bg-thorax-accent/90 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-thorax-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
                       title={
                         mode === 'mock'
                           ? 'Requiere API'
-                          : 'Marcar como en proceso de atención'
+                          : 'Iniciar atención médica'
                       }
                     >
                       <PlayCircle className="h-4 w-4" />
-                      Iniciar
+                      Atender
                     </button>
-                  )}
-                  {a.status === 'en_proceso' && (
-                    <>
-                      <button
-                        type="button"
-                        disabled={
-                          pend ||
-                          uploading ||
-                          uploadFor?.id === a.id ||
-                          mode === 'mock' ||
-                          user.id <= 0
-                        }
-                        onClick={() =>
-                          void patchStatus(a, 'atendido')
-                        }
-                        className="flex items-center gap-1.5 rounded-lg border border-thorax-border px-3 py-2 text-xs font-medium text-thorax-text hover:bg-thorax-bg-deep disabled:cursor-not-allowed disabled:opacity-40"
-                        title={
-                          mode === 'mock'
-                            ? 'Requiere API'
-                            : 'Marcar como atendida'
-                        }
-                      >
-                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                        Atendido
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          pend ||
-                          uploading ||
-                          mode === 'mock' ||
-                          user.id <= 0
-                        }
-                        onClick={() =>
-                          specOk && setUploadFor(a)
-                        }
-                        className="flex items-center gap-1.5 rounded-lg border border-thorax-accent/40 bg-thorax-accent/10 px-3 py-2 text-xs font-semibold text-thorax-accent hover:bg-thorax-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={
-                          mode === 'mock'
-                            ? 'Requiere API'
-                            : 'Subir RX y ejecutar modelo de apoyo'
-                        }
-                      >
-                        <Upload className="h-4 w-4" />
-                        RX + IA
-                      </button>
-                    </>
                   )}
                 </div>
               </div>
@@ -314,131 +217,16 @@ export function AttendQueuePage() {
         </p>
       )}
 
-      {uploadFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Cerrar"
-            className="absolute inset-0 z-10 bg-black/60"
-            onClick={() =>
-              !uploading && setUploadFor(null)
-            }
-          />
-          <div className="relative z-20 w-full max-w-md rounded-2xl border border-thorax-border bg-thorax-card-alt p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-thorax-text">
-                <Activity className="h-5 w-5 text-thorax-accent" />
-                Nueva imagen y predicción
-              </h3>
-              <button
-                type="button"
-                disabled={uploading}
-                className="text-thorax-muted hover:text-thorax-text disabled:opacity-40"
-                onClick={() =>
-                  setUploadFor(null)
-                }
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="mt-2 text-xs leading-relaxed text-thorax-muted">
-              El sistema ofrece apoyo estadístico; la decisión final corresponde
-              al equipo clínico.
-            </p>
-
-            <form onSubmit={(e) => void submitUpload(e)} className="mt-6 space-y-4">
-              <label className="block text-xs font-medium uppercase tracking-wide text-thorax-muted">
-                Imagen (PNG / JPEG recomendado)
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg"
-                  required
-                  disabled={uploading || mode === 'mock'}
-                  onChange={(ev) =>
-                    setFile(ev.target.files?.[0] ?? null)
-                  }
-                  className="mt-1 block w-full text-sm normal-case text-thorax-text"
-                />
-              </label>
-              <label className="block text-xs font-medium uppercase tracking-wide text-thorax-muted">
-                Modalidad
-                <input
-                  value={modality}
-                  onChange={(e) =>
-                    setModality(e.target.value)
-                  }
-                  placeholder="radiografia"
-                  className="mt-1 w-full rounded-xl border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-sm normal-case text-thorax-text"
-                />
-              </label>
-              <label className="block text-xs font-medium uppercase tracking-wide text-thorax-muted">
-                Nota opcional del estudio
-                <textarea
-                  value={studyNote}
-                  onChange={(e) =>
-                    setStudyNote(e.target.value)
-                  }
-                  rows={3}
-                  className="mt-1 w-full rounded-xl border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-sm normal-case text-thorax-text"
-                />
-              </label>
-
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-thorax-muted">
-                  Modelo de IA
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { value: 'random_forest', label: 'Random Forest', desc: 'Alta precisión (50 árboles)' },
-                      { value: 'logistic_regression', label: 'Reg. Logística', desc: 'Rápido e interpretable' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      disabled={uploading}
-                      onClick={() => setModelType(opt.value)}
-                      className={[
-                        'flex flex-col items-start rounded-xl border px-3 py-2.5 text-left text-xs transition-colors disabled:opacity-50',
-                        modelType === opt.value
-                          ? 'border-thorax-accent bg-thorax-accent/10 text-thorax-accent'
-                          : 'border-thorax-border bg-thorax-bg-deep text-thorax-muted hover:border-thorax-accent/50',
-                      ].join(' ')}
-                    >
-                      <span className="font-semibold normal-case">{opt.label}</span>
-                      <span className="mt-0.5 normal-case opacity-80">{opt.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={uploading || !file || mode === 'mock'}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-thorax-accent py-2.5 text-sm font-semibold text-slate-900 hover:bg-thorax-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {uploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  Enviar y analizar
-                </button>
-                <button
-                  type="button"
-                  disabled={uploading}
-                  onClick={() =>
-                    setUploadFor(null)
-                  }
-                  className="flex-1 rounded-xl border border-thorax-border py-2.5 text-sm"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {attendModalFor && (
+        <AttendAppointmentModal
+          appointment={attendModalFor.appointment}
+          patientName={attendModalFor.patientName}
+          onClose={() => setAttendModalFor(null)}
+          onSuccess={() => {
+            setAttendModalFor(null)
+            refreshApi()
+          }}
+        />
       )}
     </div>
   )

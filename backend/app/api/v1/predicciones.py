@@ -60,6 +60,7 @@ async def create_prediction(
     medico_id: int = Form(...),
     modelo: str = Form("lr"),
     datos_clinicos_id: int | None = Form(None),
+    cita_id: int | None = Form(None),
     radiografia: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> Prediccion:
@@ -79,6 +80,7 @@ async def create_prediction(
         paciente_id=paciente_id,
         medico_id=medico_id,
         datos_clinicos_id=datos_clinicos_id,
+        cita_id=cita_id,
         modelo_utilizado=modelo.lower(),
         clase_predicha=result,
         probabilidad=probability or 0.0,

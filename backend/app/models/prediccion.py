@@ -13,6 +13,7 @@ class Prediccion(Base):
     paciente_id: Mapped[int] = mapped_column(ForeignKey("pacientes.id"), nullable=False, index=True)
     medico_id: Mapped[int | None] = mapped_column(ForeignKey("medicos.id", ondelete="SET NULL"), nullable=True, index=True)
     datos_clinicos_id: Mapped[int | None] = mapped_column(ForeignKey("datos_clinicos.id", ondelete="SET NULL"), nullable=True, index=True)
+    cita_id: Mapped[int | None] = mapped_column(ForeignKey("citas.id", ondelete="SET NULL"), nullable=True, index=True)
     modelo_utilizado: Mapped[str] = mapped_column(String(20), nullable=False)
     probabilidad: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False)
     clase_predicha: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -24,4 +25,5 @@ class Prediccion(Base):
     paciente = relationship("Paciente", back_populates="predicciones", lazy="selectin")
     medico = relationship("Medico", back_populates="predicciones", lazy="selectin")
     dato_clinico = relationship("DatoClinico", back_populates="predicciones", lazy="selectin")
+    cita = relationship("Cita", back_populates="predicciones", lazy="selectin")
     recomendacion = relationship("Recomendacion", back_populates="prediccion", uselist=False)

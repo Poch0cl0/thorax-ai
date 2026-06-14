@@ -9,7 +9,7 @@ export function ScanPage() {
   /* ------------------------------------------------------------------ */
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
-  const [modelType, setModelType] = useState('random_forest')
+  const [modelType, setModelType] = useState('logistic_regression')
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([
     {
       value: 'random_forest',
@@ -23,6 +23,7 @@ export function ScanPage() {
     },
   ])
   const [result, setResult] = useState<ScanResult | null>(null)
+  const [editableRecommendation, setEditableRecommendation] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -115,6 +116,7 @@ export function ScanPage() {
     try {
       const scanResult = await clinical.analyzeScan(file, modelType)
       setResult(scanResult)
+      setEditableRecommendation(scanResult.recommendation || '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al analizar la imagen')
     } finally {
@@ -367,8 +369,22 @@ export function ScanPage() {
 
               {/* Recomendación */}
               <div className="recommendation-box">
-                <h3>💡 Recomendación</h3>
-                <p>{result.recommendation}</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3>💡 Recomendación</h3>
+                  <button 
+                    className="text-xs bg-thorax-accent/20 text-thorax-accent px-2 py-1 rounded hover:bg-thorax-accent/30"
+                    onClick={() => {
+                      alert('Recomendación guardada con éxito (simulado en modo standalone).')
+                    }}
+                  >
+                    Guardar Cambios
+                  </button>
+                </div>
+                <textarea
+                  className="w-full bg-thorax-bg-deep border border-thorax-border rounded-lg p-3 text-sm text-thorax-text outline-none focus:border-thorax-accent resize-vertical min-h-[100px]"
+                  value={editableRecommendation}
+                  onChange={(e) => setEditableRecommendation(e.target.value)}
+                />
               </div>
 
               {/* Disclaimer */}
