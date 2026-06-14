@@ -1,8 +1,10 @@
-from app.api.v1 import (
+from . import (
     auth,
     citas,
     datos_clinicos,
     disponibilidad,
+    escaner,
+    medicos,
     pacientes,
     predicciones,
     recomendaciones,
@@ -15,6 +17,8 @@ __all__ = [
     "citas",
     "datos_clinicos",
     "disponibilidad",
+    "escaner",
+    "medicos",
     "pacientes",
     "predicciones",
     "recomendaciones",
