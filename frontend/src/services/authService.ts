@@ -9,7 +9,7 @@ export async function loginWithPassword(
   body.set('username', email)
   body.set('password', password)
 
-  const res = await fetch(`${getApiBase()}/api/v1/auth/token`, {
+  const res = await fetch(`${getApiBase()}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
@@ -34,7 +34,7 @@ export function logout() {
 }
 
 export async function fetchCurrentUser(): Promise<User> {
-  const data = await apiFetch<User>('/api/v1/users/me')
+  const data = await apiFetch<User>('/api/v1/auth/me')
   const roles =
     Array.isArray(data.roles) && data.roles.length > 0
       ? [...data.roles]

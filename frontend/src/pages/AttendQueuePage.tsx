@@ -23,7 +23,7 @@ function isOpenStatus(status: AppointmentStatus): boolean {
 
 export function AttendQueuePage() {
   const { user } = useAuth()
-  const { vm, loading, mode, refreshApi, runPredictionApi } =
+  const { vm, loading, mode, refreshApi } =
     useClinicalViewModel()
 
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -119,14 +119,12 @@ export function AttendQueuePage() {
     setUploading(true)
     setMessage(null)
     try {
-      const study = await clinicalService.createStudyWithImage({
+      await clinicalService.createPredictionDirectly({
         patient_id: patientIdNum,
-        appointment_id: apptNum,
-        modality,
-        description: studyNote.trim() || null,
+        medico_id: user.id,
+        model_type: modelType,
         file,
       })
-      await runPredictionApi(study.id, modelType)
       await refreshApi()
       setUploadFor(null)
       setFile(null)
