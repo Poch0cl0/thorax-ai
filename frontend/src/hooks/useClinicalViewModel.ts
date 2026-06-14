@@ -12,7 +12,10 @@ import type {
 import {
   deriveViewModel,
   loadClinicalViewModelFromApi,
+  loadSecretariaViewModelFromApi,
+  loadMedicoViewModelFromApi,
   isClinicalMock,
+  mapUserRoleToAppRole,
 } from '../services/clinicalRepository'
 import {
   subscribeMockClinical,
@@ -23,9 +26,15 @@ import {
   addMockPrediction,
 } from '../services/mockClinicalStore'
 import * as clinicalService from '../services/clinicalService'
+import { useAuth } from '../context/useAuth'
 
 export function useClinicalViewModel() {
   const mock = isClinicalMock()
+  const { user, effectiveApiRole } = useAuth()
+  const appRole = user
+    ? mapUserRoleToAppRole(user.email, user.role, effectiveApiRole)
+    : null
+
   const snap = useSyncExternalStore(
     mock ? subscribeMockClinical : () => () => {},
     () => getMockClinicalSnapshot(),
@@ -44,13 +53,19 @@ export function useClinicalViewModel() {
     if (mock) return
     setApiLoading(true)
     try {
-      setApiVm(await loadClinicalViewModelFromApi())
+      const loader =
+        appRole === 'secretaria'
+          ? loadSecretariaViewModelFromApi
+          : appRole === 'especialista' && user?.medico_id
+            ? () => loadMedicoViewModelFromApi(user.medico_id!)
+            : loadClinicalViewModelFromApi
+      setApiVm(await loader())
     } catch {
       setApiVm(null)
     } finally {
       setApiLoading(false)
     }
-  }, [mock])
+  }, [mock, appRole, user?.medico_id])
 
   useEffect(() => {
     if (mock) return
@@ -93,7 +108,6 @@ export function useClinicalViewModel() {
       birth_date?: string | null
       email?: string | null
     }) => {
-      // Split full_name naively
       const parts = input.full_name.split(' ')
       const nombres = parts[0] || 'Nuevo'
       const apellidos = parts.slice(1).join(' ') || 'Paciente'

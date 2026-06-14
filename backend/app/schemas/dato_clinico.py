@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 class DatoClinicoBase(BaseModel):
     paciente_id: int
     medico_id: int | None = None
+    cita_id: int | None = None
     edad: int | None = None
     fumador: bool | None = None
     paquetes_anio: float | None = None

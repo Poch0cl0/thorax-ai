@@ -6,6 +6,7 @@ export type User = {
   role: string
   roles: string[]
   created_at: string
+  medico_id?: number | null
 }
 
 export type UserBrief = {
@@ -13,6 +14,8 @@ export type UserBrief = {
   email: string
   full_name: string | null
   roles: string[]
+  usuario_id?: number
+  cmp?: string | null
 }
 
 export type AppointmentApi = {
@@ -58,6 +61,10 @@ export type Prediction = {
   model_version: string
   risk_score: number | null
   finding_label: string
+  disease_class?: string
+  clase_predicha?: string
+  probabilidad?: number
+  nivel_riesgo?: string
   details: Record<string, unknown> | null
   created_at: string
 }

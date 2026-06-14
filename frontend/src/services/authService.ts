@@ -1,5 +1,6 @@
 import type { TokenResponse, User } from '../types/api'
 import { apiFetch, getApiBase, setToken } from './api'
+import * as clinicalService from './clinicalService'
 
 export async function loginWithPassword(
   email: string,
@@ -33,9 +34,34 @@ export function logout() {
   setToken(null)
 }
 
-export async function fetchCurrentUser(): Promise<User> {
-  const data = await apiFetch<any>('/api/v1/auth/me')
+function mapUserFromApi(data: any): User {
   const roleName = data.rol?.nombre?.toLowerCase() || data.role?.toLowerCase() || 'clinician'
   const roles = Array.isArray(data.roles) && data.roles.length > 0 ? [...data.roles] : [roleName]
-  return { ...data, role: roleName, roles }
+  return {
+    id: data.id,
+    email: data.email,
+    full_name: data.nombre_completo ?? data.full_name ?? null,
+    is_active: data.activo ?? data.is_active ?? true,
+    role: roleName,
+    roles,
+    created_at: data.created_at ?? '',
+    medico_id: data.medico_id ?? null,
+  }
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+  const data = await apiFetch<any>('/api/v1/auth/me')
+  const user = mapUserFromApi(data)
+
+  if (!user.medico_id && (user.role === 'medico' || user.roles.includes('medico'))) {
+    try {
+      const clinicians = await clinicalService.listClinicians()
+      const match = clinicians.find((c) => c.usuario_id === user.id)
+      if (match) user.medico_id = match.id
+    } catch {
+      /* optional */
+    }
+  }
+
+  return user
 }

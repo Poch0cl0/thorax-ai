@@ -3,9 +3,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.medico_scope import is_doctor, require_medico_id
 from app.core.permisos import ADMIN_ROLE, DOCTOR_ROLE
-from app.dependencies import require_roles
+from app.dependencies import get_current_user, require_roles
 from app.models.dato_clinico import DatoClinico
+from app.models.usuario import Usuario
 from app.schemas.dato_clinico import DatoClinicoCreate, DatoClinicoRead, DatoClinicoUpdate
 
 router = APIRouter(prefix="/datos-clinicos", tags=["datos-clinicos"])
@@ -14,18 +16,28 @@ router = APIRouter(prefix="/datos-clinicos", tags=["datos-clinicos"])
 @router.get("", response_model=list[DatoClinicoRead], dependencies=[Depends(require_roles(ADMIN_ROLE, DOCTOR_ROLE))])
 async def list_clinical_data(
     paciente_id: int | None = None,
+    cita_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[DatoClinico]:
     query = select(DatoClinico)
     if paciente_id is not None:
         query = query.where(DatoClinico.paciente_id == paciente_id)
+    if cita_id is not None:
+        query = query.where(DatoClinico.cita_id == cita_id)
     result = await db.execute(query.order_by(DatoClinico.id.desc()))
     return list(result.scalars().all())
 
 
 @router.post("", response_model=DatoClinicoRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_roles(ADMIN_ROLE, DOCTOR_ROLE))])
-async def create_clinical_data(payload: DatoClinicoCreate, db: AsyncSession = Depends(get_db)) -> DatoClinico:
-    item = DatoClinico(**payload.model_dump())
+async def create_clinical_data(
+    payload: DatoClinicoCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+) -> DatoClinico:
+    data = payload.model_dump()
+    if is_doctor(current_user):
+        data["medico_id"] = await require_medico_id(db, current_user)
+    item = DatoClinico(**data)
     db.add(item)
     await db.commit()
     await db.refresh(item)

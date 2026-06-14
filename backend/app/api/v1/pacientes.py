@@ -1,15 +1,19 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.core.medico_scope import resolve_medico_id_param
 from app.core.permisos import ADMIN_ROLE, DOCTOR_ROLE, SECRETARY_ROLE
-from app.dependencies import require_roles
+from app.dependencies import get_current_user, require_roles
+from app.models.cita import Cita
+from app.models.dato_clinico import DatoClinico
 from app.models.paciente import Paciente
 from app.models.prediccion import Prediccion
+from app.models.usuario import Usuario
 from app.schemas.paciente import PacienteCreate, PacienteHistorialRead, PacienteRead, PacienteUpdate
 
 router = APIRouter(prefix="/pacientes", tags=["pacientes"])
@@ -19,9 +23,24 @@ router = APIRouter(prefix="/pacientes", tags=["pacientes"])
 async def list_patients(
     search: str | None = None,
     dni: str | None = None,
+    medico_id: int | None = None,
+    con_datos_clinicos: bool | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
 ) -> list[Paciente]:
-    query = select(Paciente)
+    effective_medico_id = await resolve_medico_id_param(db, current_user, medico_id)
+
+    query = select(Paciente).distinct()
+    if effective_medico_id is not None:
+        query = query.join(Cita, Cita.paciente_id == Paciente.id).where(
+            Cita.medico_id == effective_medico_id
+        )
+    if con_datos_clinicos:
+        query = query.where(
+            exists().where(
+                DatoClinico.paciente_id == Paciente.id,
+            )
+        )
     if dni:
         query = query.where(Paciente.dni == dni)
     if search:

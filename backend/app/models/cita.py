@@ -14,7 +14,7 @@ class Cita(Base):
     medico_id: Mapped[int | None] = mapped_column(ForeignKey("medicos.id", ondelete="SET NULL"), nullable=True, index=True)
     disponibilidad_id: Mapped[int | None] = mapped_column(ForeignKey("disponibilidad_medica.id", ondelete="SET NULL"), nullable=True)
     fecha_cita: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    estado: Mapped[str] = mapped_column(String(40), default="programada", nullable=False)
+    estado: Mapped[str] = mapped_column(String(40), default="pendiente", nullable=False)
     motivo_consulta: Mapped[str | None] = mapped_column(Text, nullable=True)
     observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

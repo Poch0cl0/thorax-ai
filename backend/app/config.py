@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     app_host: str = Field(default="127.0.0.1")
     app_port: int = Field(default=8000)
     app_debug: bool = Field(default=True)
-    backend_cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173")
+    backend_cors_origins: str = Field(
+        default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
+    )
     model_lr_path: str = Field(default="models_ia/modelo_lr.joblib")
     model_rf_path: str = Field(default="models_ia/modelo_rf.joblib")
 

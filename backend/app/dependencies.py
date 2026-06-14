@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.core.permisos import normalize_role
 from app.core.security import decode_access_token
 from app.models.rol import Rol
 from app.models.usuario import Usuario
@@ -32,7 +33,10 @@ async def get_current_user(
 
     result = await db.execute(
         select(Usuario)
-        .options(selectinload(Usuario.rol).selectinload(Rol.permisos))
+        .options(
+            selectinload(Usuario.rol).selectinload(Rol.permisos),
+            selectinload(Usuario.medico),
+        )
         .where(Usuario.id == user_id)
     )
     user = result.scalar_one_or_none()
@@ -42,9 +46,11 @@ async def get_current_user(
 
 
 def require_roles(*roles: str) -> Callable:
+    allowed = {normalize_role(role) for role in roles}
+
     async def dependency(current_user: Usuario = Depends(get_current_user)) -> Usuario:
-        user_role = current_user.rol.nombre if current_user.rol else None
-        if user_role not in roles:
+        user_role = normalize_role(current_user.rol.nombre if current_user.rol else None)
+        if user_role not in allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
         return current_user
 

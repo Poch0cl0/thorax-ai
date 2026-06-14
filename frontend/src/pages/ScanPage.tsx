@@ -1,400 +1,167 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import * as clinical from '../services/clinicalService'
-import type { ModelOption, ScanResult } from '../types/api'
-import './ScanPage.css'
+import { useEffect, useState } from 'react'
+import { Activity, ArrowLeft, Loader2, Upload, Users } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
+import { listPacientesClinicos, type PacienteClinico } from '../services/medicoService'
+import * as clinicalService from '../services/clinicalService'
+import { AppBadge } from '../components/ui/AppBadge'
+import { ClinicalDataDisplay } from '../features/clinical/ClinicalDataDisplay'
+
+function riskVariant(level: string | undefined) {
+  const l = level?.toLowerCase() ?? ''
+  if (l === 'alto' || l === 'high') return 'danger' as const
+  if (l === 'medio' || l === 'moderado') return 'warning' as const
+  return 'success' as const
+}
 
 export function ScanPage() {
-  /* ------------------------------------------------------------------ */
-  /* State                                                               */
-  /* ------------------------------------------------------------------ */
+  const { user } = useAuth()
+  const [patients, setPatients] = useState<PacienteClinico[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<PacienteClinico | null>(null)
   const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [modelType, setModelType] = useState('logistic_regression')
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>([
-    {
-      value: 'random_forest',
-      label: 'Random Forest',
-      description: 'Modelo ensemble con alta precisión',
-    },
-    {
-      value: 'logistic_regression',
-      label: 'Regresión Logística',
-      description: 'Modelo lineal rápido con buena interpretabilidad',
-    },
-  ])
-  const [result, setResult] = useState<ScanResult | null>(null)
-  const [editableRecommendation, setEditableRecommendation] = useState('')
+  const [model, setModel] = useState('lr')
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
+  const [result, setResult] = useState<any | null>(null)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  /* ------------------------------------------------------------------ */
-  /* Cargar modelos disponibles al montar                                */
-  /* ------------------------------------------------------------------ */
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const info = await clinical.getAvailableModels()
-        if (!cancelled && info.model_options.length > 0) {
-          setModelOptions(info.model_options)
-          if (info.available_models.length > 0) {
-            setModelType(info.available_models[0])
-          }
-        }
-      } catch {
-        /* usar opciones por defecto */
-      }
-    })()
-    return () => { cancelled = true }
+    listPacientesClinicos()
+      .then(setPatients)
+      .catch(console.error)
+      .finally(() => setLoading(false))
   }, [])
 
-  /* ------------------------------------------------------------------ */
-  /* Handlers de archivo                                                 */
-  /* ------------------------------------------------------------------ */
-  const handleFile = useCallback((f: File | null) => {
+  async function handleAnalyze() {
+    if (!selected || !file) return
+    setBusy(true)
     setError(null)
     setResult(null)
-
-    if (!f) {
-      setFile(null)
-      setPreview(null)
-      return
-    }
-
-    // Validar tipo
-    const allowed = ['image/jpeg', 'image/png', 'image/bmp', 'image/tiff', 'image/webp']
-    if (!allowed.includes(f.type)) {
-      setError('Formato no soportado. Usa JPEG, PNG, BMP, TIFF o WebP.')
-      return
-    }
-
-    // Validar tamaño (10 MB)
-    if (f.size > 10 * 1024 * 1024) {
-      setError('La imagen excede el tamaño máximo (10 MB).')
-      return
-    }
-
-    setFile(f)
-
-    // Generar preview
-    const reader = new FileReader()
-    reader.onload = (e) => setPreview(e.target?.result as string)
-    reader.readAsDataURL(f)
-  }, [])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setDragOver(false)
-      const f = e.dataTransfer.files[0]
-      if (f) handleFile(f)
-    },
-    [handleFile],
-  )
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(true)
-  }, [])
-
-  const handleDragLeave = useCallback(() => {
-    setDragOver(false)
-  }, [])
-
-  /* ------------------------------------------------------------------ */
-  /* Enviar análisis                                                     */
-  /* ------------------------------------------------------------------ */
-  const handleAnalyze = async () => {
-    if (!file) return
-    setLoading(true)
-    setError(null)
-    setResult(null)
-
     try {
-      const scanResult = await clinical.analyzeScan(file, modelType)
-      setResult(scanResult)
-      setEditableRecommendation(scanResult.recommendation || '')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al analizar la imagen')
+      const dcId = selected.ultimo_dato_clinico?.id as number | undefined
+      const dcMedicoId = selected.ultimo_dato_clinico?.medico_id as number | undefined
+      const pred = await clinicalService.createPredictionDirectly({
+        patient_id: selected.paciente.id,
+        medico_id: user?.medico_id ?? dcMedicoId ?? undefined,
+        datos_clinicos_id: dcId,
+        model_type: model,
+        file,
+      })
+      setResult(pred)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error en el análisis')
     } finally {
-      setLoading(false)
+      setBusy(false)
     }
   }
 
-  /* ------------------------------------------------------------------ */
-  /* Helpers de formato                                                  */
-  /* ------------------------------------------------------------------ */
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  const riskEmoji = (level: string) => {
-    if (level === 'alto') return '🔴'
-    if (level === 'moderado') return '🟡'
-    return '🟢'
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Render                                                              */
-  /* ------------------------------------------------------------------ */
-  return (
-    <div>
-      {/* Header */}
-      <div className="scan-header">
-        <h1>🔬 Análisis de Radiografía Torácica</h1>
-        <p className="subtitle">
-          Sube una imagen de radiografía transversal de tórax y nuestro sistema
-          de inteligencia artificial analizará la presencia de posibles
-          anomalías compatibles con cáncer.
-        </p>
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center text-thorax-muted">
+        <Loader2 className="h-8 w-8 animate-spin text-thorax-accent" />
       </div>
+    )
+  }
 
-      {/* Layout 2 columnas */}
-      <div className="scan-layout">
-        {/* ============= COLUMNA IZQUIERDA ============= */}
-        <div className="scan-card">
-          <h2>
-            <span className="icon">📤</span> Subir Radiografía
-          </h2>
+  if (selected) {
+    const dc = selected.ultimo_dato_clinico as Record<string, unknown> | null
+    return (
+      <div className="mx-auto max-w-3xl space-y-8">
+        <button type="button" onClick={() => { setSelected(null); setResult(null); setFile(null) }}
+          className="inline-flex items-center gap-2 text-sm text-thorax-muted hover:text-thorax-text">
+          <ArrowLeft className="h-4 w-4" /> Volver al listado
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-thorax-text">Análisis IA — {selected.paciente.nombres} {selected.paciente.apellidos}</h1>
+          <p className="mt-1 text-sm text-thorax-muted">Suba una radiografía para obtener la predicción de riesgo.</p>
+        </div>
 
-          {/* Zona de upload */}
-          <div
-            className={`upload-zone${dragOver ? ' drag-over' : ''}${file ? ' has-file' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
-            }}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/bmp,image/tiff,image/webp"
-              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-            />
-            {!file ? (
-              <>
-                <span className="upload-icon">🩻</span>
-                <p className="upload-text">
-                  <strong>Arrastra una imagen aquí</strong> o haz clic para
-                  seleccionar
-                </p>
-                <p className="upload-formats">
-                  JPEG, PNG, BMP, TIFF, WebP · Máx. 10 MB
-                </p>
-              </>
-            ) : (
-              <p className="upload-text">
-                ✅ Imagen cargada — haz clic para cambiar
-              </p>
-            )}
-          </div>
+        <div className="rounded-xl border border-thorax-border bg-thorax-card p-5">
+          <ClinicalDataDisplay data={dc} title="Datos clínicos del paciente" compact />
+        </div>
 
-          {/* Preview */}
-          {preview && file && (
-            <div className="image-preview">
-              <img src={preview} alt="Preview de radiografía" />
-              <div className="file-info">
-                <span>{file.name} · {formatSize(file.size)}</span>
-                <button
-                  type="button"
-                  className="btn-remove"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleFile(null)
-                  }}
-                >
-                  ✕ Quitar
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="rounded-xl border border-thorax-border bg-thorax-card p-6 space-y-4">
+          <label className="block text-sm font-medium text-thorax-muted">Modelo</label>
+          <select value={model} onChange={(e) => setModel(e.target.value)}
+            className="w-full rounded-lg border border-thorax-border bg-thorax-bg-deep px-3 py-2 text-sm text-thorax-text">
+            <option value="lr">Regresión Logística (lr)</option>
+            <option value="rf">Random Forest (rf)</option>
+          </select>
 
-          {/* Selector de modelo */}
-          <div className="model-selector">
-            <label>Modelo de IA</label>
-            <div className="model-options">
-              {modelOptions.map((opt) => (
-                <div
-                  key={opt.value}
-                  className={`model-option${modelType === opt.value ? ' selected' : ''}`}
-                  onClick={() => setModelType(opt.value)}
-                  role="radio"
-                  aria-checked={modelType === opt.value}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') setModelType(opt.value)
-                  }}
-                >
-                  <span className="model-name">{opt.label}</span>
-                  <span className="model-desc">{opt.description}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-thorax-border p-8 cursor-pointer hover:border-thorax-accent/50">
+            <Upload className="h-8 w-8 text-thorax-muted" />
+            <span className="text-sm text-thorax-muted">{file ? file.name : 'Seleccionar imagen RX'}</span>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </label>
 
-          {/* Botón analizar */}
-          <button
-            id="btn-analyze-scan"
-            type="button"
-            className={`btn-analyze${loading ? ' loading' : ''}`}
-            disabled={!file || loading}
-            onClick={handleAnalyze}
-          >
-            {loading ? (
-              <>
-                <span className="spinner" />
-                Analizando imagen…
-              </>
-            ) : (
-              '🔍 Analizar Radiografía'
-            )}
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
+          <button type="button" disabled={!file || busy} onClick={() => void handleAnalyze()}
+            className="w-full rounded-xl bg-thorax-accent py-3 text-sm font-semibold text-slate-900 hover:bg-thorax-accent-hover disabled:opacity-50">
+            {busy ? 'Analizando…' : 'Analizar imagen'}
           </button>
-
-          {/* Error */}
-          {error && <div className="scan-error">⚠️ {error}</div>}
         </div>
 
-        {/* ============= COLUMNA DERECHA ============= */}
-        <div className="scan-card">
-          <h2>
-            <span className="icon">📊</span> Resultados del Análisis
-          </h2>
-
-          {!result && !loading && (
-            <div className="results-placeholder">
-              <span className="placeholder-icon">🏥</span>
-              <p>
-                Sube una imagen de radiografía y selecciona un modelo para
-                obtener el análisis de detección.
-              </p>
-            </div>
-          )}
-
-          {loading && (
-            <div className="results-placeholder">
-              <span className="placeholder-icon">⏳</span>
-              <p>Procesando imagen con el modelo de IA…</p>
-            </div>
-          )}
-
-          {result && (
-            <div className="results-panel">
-              {/* Predicción principal */}
-              <div
-                className={`prediction-main ${result.prediction === 'cancer_detected' ? 'cancer' : 'normal'}`}
-              >
-                <span className="prediction-icon">
-                  {result.prediction === 'cancer_detected' ? '⚠️' : '✅'}
-                </span>
-                <div className="prediction-label">
-                  {result.prediction === 'cancer_detected'
-                    ? 'Anomalía Detectada'
-                    : 'Sin Anomalías Significativas'}
-                </div>
-                <div className="prediction-confidence animate-number">
-                  Confianza: {result.confidence_percent.toFixed(1)}%
-                </div>
-              </div>
-
-              {/* Barras de probabilidad */}
-              <div className="probability-section">
-                <h3>Distribución de Probabilidad</h3>
-
-                <div className="prob-bar-container">
-                  <div className="prob-bar-label">
-                    <span className="label-text">Probabilidad de cáncer</span>
-                    <span className="label-value cancer">
-                      {(result.probability_cancer * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="prob-bar-track">
-                    <div
-                      className="prob-bar-fill cancer"
-                      style={{ width: `${result.probability_cancer * 100}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="prob-bar-container">
-                  <div className="prob-bar-label">
-                    <span className="label-text">Probabilidad normal</span>
-                    <span className="label-value normal">
-                      {(result.probability_normal * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="prob-bar-track">
-                    <div
-                      className="prob-bar-fill normal"
-                      style={{ width: `${result.probability_normal * 100}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Detalles del modelo */}
-              <div className="model-details">
-                <div className="detail-chip">
-                  <span className="chip-label">Nivel de riesgo</span>
-                  <span className="chip-value">
-                    <span className={`risk-badge ${result.risk_level}`}>
-                      {riskEmoji(result.risk_level)} {result.risk_level.toUpperCase()}
-                    </span>
-                  </span>
-                </div>
-                <div className="detail-chip">
-                  <span className="chip-label">Modelo</span>
-                  <span className="chip-value">{result.model_display_name}</span>
-                </div>
-                <div className="detail-chip">
-                  <span className="chip-label">Versión</span>
-                  <span className="chip-value">{result.model_version}</span>
-                </div>
-                <div className="detail-chip">
-                  <span className="chip-label">Confianza</span>
-                  <span className="chip-value">
-                    {result.confidence_percent.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Recomendación */}
-              <div className="recommendation-box">
-                <div className="flex items-center justify-between mb-2">
-                  <h3>💡 Recomendación</h3>
-                  <button 
-                    className="text-xs bg-thorax-accent/20 text-thorax-accent px-2 py-1 rounded hover:bg-thorax-accent/30"
-                    onClick={() => {
-                      alert('Recomendación guardada con éxito (simulado en modo standalone).')
-                    }}
-                  >
-                    Guardar Cambios
-                  </button>
-                </div>
-                <textarea
-                  className="w-full bg-thorax-bg-deep border border-thorax-border rounded-lg p-3 text-sm text-thorax-text outline-none focus:border-thorax-accent resize-vertical min-h-[100px]"
-                  value={editableRecommendation}
-                  onChange={(e) => setEditableRecommendation(e.target.value)}
-                />
-              </div>
-
-              {/* Disclaimer */}
-              <div className="disclaimer-box">
-                <p>{result.disclaimer}</p>
-              </div>
-            </div>
-          )}
-        </div>
+        {result && (
+          <div className="rounded-xl border border-thorax-accent/30 bg-thorax-card p-6 space-y-3">
+            <h2 className="text-lg font-semibold text-thorax-text flex items-center gap-2">
+              <Activity className="h-5 w-5 text-thorax-accent" /> Resultado
+            </h2>
+            <p className="text-sm"><span className="text-thorax-muted">Clase:</span> {result.disease_class ?? result.clase_predicha}</p>
+            <p className="text-sm"><span className="text-thorax-muted">Probabilidad:</span> {((result.risk_score ?? result.probabilidad ?? 0) * 100).toFixed(1)}%</p>
+            <AppBadge variant={riskVariant(result.details?.risk_level ?? result.nivel_riesgo)}>
+              Riesgo {(result.details?.risk_level ?? result.nivel_riesgo ?? '—').toString()}
+            </AppBadge>
+          </div>
+        )}
       </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-thorax-text">Análisis IA</h1>
+        <p className="mt-2 text-sm text-thorax-muted">Seleccione un paciente atendido (con datos clínicos) para analizar su radiografía.</p>
+      </div>
+
+      {patients.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-thorax-border p-8 text-center text-sm text-thorax-muted">
+          No hay pacientes con datos clínicos. Atienda citas primero para habilitar el análisis.
+        </p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {patients.map((row) => {
+            const p = row.paciente
+            const pred = row.ultima_prediccion as Record<string, unknown> | null
+            const dc = row.ultimo_dato_clinico as Record<string, unknown> | null
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelected(row)}
+                className="text-left rounded-xl border border-thorax-border bg-thorax-card p-5 hover:border-thorax-accent/40 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-thorax-text">{p.nombres} {p.apellidos}</p>
+                    <p className="text-xs text-thorax-muted mt-1">DNI: {p.dni ?? '—'}</p>
+                  </div>
+                  <Users className="h-5 w-5 text-thorax-accent shrink-0" />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  {dc?.fumador != null && <span className="rounded-full bg-thorax-bg-deep px-2 py-0.5 text-thorax-muted">Fumador: {dc.fumador ? 'Sí' : 'No'}</span>}
+                  {dc?.edad != null && <span className="rounded-full bg-thorax-bg-deep px-2 py-0.5 text-thorax-muted">Edad: {String(dc.edad)}</span>}
+                  {pred && (
+                    <AppBadge variant={riskVariant(String(pred.nivel_riesgo))}>
+                      Riesgo {String(pred.nivel_riesgo)}
+                    </AppBadge>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

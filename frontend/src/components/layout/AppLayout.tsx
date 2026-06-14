@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CalendarCheck2,
   ChevronRight,
+  FileText,
   LayoutDashboard,
   LogOut,
   Users,
@@ -48,6 +49,7 @@ export function AppLayout() {
     { to: '/attend-queue', label: 'Citas', icon: CalendarCheck2 },
     { to: '/agenda', label: 'Agenda', icon: CalendarDays },
     { to: '/scan', label: 'Análisis IA', icon: Activity },
+    { to: '/recommendations', label: 'Recomendaciones', icon: FileText },
   ]
 
   const navSecretaria: NavLinkItem[] = [
@@ -69,6 +71,7 @@ export function AppLayout() {
       { to: '/attend-queue', label: 'Atender citas', icon: CalendarCheck2 },
       { to: '/agenda', label: 'Agenda', icon: CalendarDays },
       { to: '/scan', label: 'Análisis IA', icon: Activity },
+      { to: '/recommendations', label: 'Recomendaciones', icon: FileText },
     ]
   else links = navEspecialista
 
@@ -83,7 +86,6 @@ export function AppLayout() {
             <p className="truncate font-semibold leading-tight text-thorax-text">
               ThoraxAI
             </p>
-            <p className="text-xs text-thorax-muted">Versión 1.0</p>
           </div>
         </div>
 
@@ -110,7 +112,7 @@ export function AppLayout() {
 
         <div className="border-t border-thorax-border/80 p-4">
           <p className="truncate text-sm font-medium text-thorax-text">
-            {user?.full_name || 'Usuario'}
+            {user?.full_name || (user as any)?.nombre_completo || 'Usuario'}
           </p>
           <p className="mt-1 truncate text-xs text-thorax-muted" title={user?.email}>
             {user?.email}

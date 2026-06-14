@@ -19,7 +19,7 @@ export function apiRoleToAppRole(
   apiRole: string | undefined,
 ): import('../types/clinical-domain').AppRole {
   const lower = apiRole?.toLowerCase() ?? ''
-  if (lower === 'admin') return 'admin'
+  if (lower === 'admin' || lower === 'administrador') return 'admin'
   if (lower === 'secretaria' || lower === 'secretary') return 'secretaria'
   if (
     lower === 'especialista' ||
@@ -33,6 +33,26 @@ export function apiRoleToAppRole(
   return 'especialista'
 }
 
+export function isAdminUser(user: { role?: string; roles?: string[] } | null | undefined): boolean {
+  if (!user) return false
+  const role = user.role?.toLowerCase() ?? ''
+  if (role === 'admin' || role === 'administrador') return true
+  return !!user.roles?.some((r) => {
+    const lower = r.toLowerCase()
+    return lower === 'admin' || lower === 'administrador'
+  })
+}
+
+export function isDoctorRoleName(name: string | undefined): boolean {
+  const lower = name?.toLowerCase() ?? ''
+  return (
+    lower === 'especialista' ||
+    lower === 'medico' ||
+    lower === 'médico' ||
+    lower === 'clinician'
+  )
+}
+
 /** Preferir `effectiveApiRole`; si no, mismo mapeo que antes con rol primario/mock. */
 export function mapUserRoleToAppRole(
   email: string | undefined,
@@ -43,7 +63,7 @@ export function mapUserRoleToAppRole(
     return apiRoleToAppRole(effectiveApiRole)
   }
   const lower = apiRole?.toLowerCase() ?? ''
-  if (lower === 'admin') return 'admin'
+  if (lower === 'admin' || lower === 'administrador') return 'admin'
   if (lower === 'secretaria' || lower === 'secretary') return 'secretaria'
   if (
     lower === 'especialista' || 
@@ -129,46 +149,78 @@ function patientFromApi(p: ApiPatient): PatientRecord {
   }
 }
 
-function mapAppointmentApi(a: import('../types/api').AppointmentApi): AppointmentRecord {
-  const st = a.status as AppointmentRecord['status']
+export function normalizeAppointmentStatus(status: string): AppointmentRecord['status'] {
+  const lower = status.toLowerCase()
+  if (lower === 'pendiente') return 'pendiente'
+  if (lower === 'atendida' || lower === 'atendido') return 'atendida'
+  if (lower === 'cancelada' || lower === 'cancelado') return 'cancelada'
+  if (lower === 'en_proceso') return 'en_proceso'
+  return 'pendiente'
+}
+
+function mapAppointmentApi(a: import('./clinicalService').MappedAppointment): AppointmentRecord {
   return {
     id: String(a.id),
     patient_id: String(a.patient_id),
     specialist_id:
       a.attending_user_id != null ? String(a.attending_user_id) : null,
     scheduled_at: a.scheduled_at,
-    status: ['pendiente', 'en_proceso', 'atendido', 'cancelado'].includes(st)
-      ? st
-      : 'pendiente',
+    status: normalizeAppointmentStatus(a.status),
     notes: a.notes,
+    predicciones: (a as any).predicciones,
   }
 }
 
-export async function loadClinicalViewModelFromApi(): Promise<ClinicalViewModel> {
+function specialistsFromClinicians(cliniciansRaw: import('../types/api').UserBrief[]): SpecialistRecord[] {
+  return cliniciansRaw.map((u) => ({
+    id: String(u.id),
+    user_id: String(u.id),
+    usuario_id: u.usuario_id != null ? String(u.usuario_id) : undefined,
+    cmp: u.cmp ?? '—',
+    specialty: 'Neumología',
+    display_name: u.full_name ?? u.email,
+    email_hint: u.email,
+  }))
+}
+
+async function loadBaseClinicalData() {
   const patientsApi = await clinicalService.listPatients()
-  let apptsRaw: import('../types/api').AppointmentApi[] = []
+  let apptsRaw: import('./clinicalService').MappedAppointment[] = []
   let cliniciansRaw: import('../types/api').UserBrief[] = []
   try {
     apptsRaw = await clinicalService.listAppointments()
   } catch {
-    /* listado opcional ante permisos o error de red */
+    /* optional */
   }
   try {
     cliniciansRaw = await clinicalService.listClinicians()
   } catch {
-    /* médicos opcionales */
+    /* optional */
   }
+  return {
+    patientsApi,
+    patients: patientsApi.map(patientFromApi),
+    appointments: apptsRaw.map(mapAppointmentApi),
+    specialists: specialistsFromClinicians(cliniciansRaw),
+  }
+}
 
-  const patients = patientsApi.map(patientFromApi)
-  const appointments = apptsRaw.map(mapAppointmentApi)
-  const specialists: SpecialistRecord[] = cliniciansRaw.map((u) => ({
-    id: String(u.id),
-    user_id: String(u.id),
-    cmp: '—',
-    specialty: 'Clínico',
-    display_name: u.full_name ?? u.email,
-    email_hint: u.email,
-  }))
+export async function loadSecretariaViewModelFromApi(): Promise<ClinicalViewModel> {
+  const { patients, appointments, specialists } = await loadBaseClinicalData()
+  const data: import('../types/clinical-domain').DemoClinicalSeed = {
+    demo_users: {},
+    patients,
+    specialists,
+    appointments,
+    studies: [],
+    predictions: [],
+    diagnoses: [],
+  }
+  return deriveViewModel(data)
+}
+
+export async function loadClinicalViewModelFromApi(): Promise<ClinicalViewModel> {
+  const { patientsApi, patients, appointments, specialists } = await loadBaseClinicalData()
 
   const studiesFlat: import('../types/clinical-domain').StudyRecord[] = []
   const predictionsFlat: PredictionRecord[] = []
@@ -223,5 +275,29 @@ export async function loadClinicalViewModelFromApi(): Promise<ClinicalViewModel>
     diagnoses,
   }
 
+  return deriveViewModel(data)
+}
+
+export async function loadMedicoViewModelFromApi(medicoId: number): Promise<ClinicalViewModel> {
+  const patientsApi = await clinicalService.listPatients({ medico_id: medicoId })
+  const apptsRaw = await clinicalService.listAppointments({ medico_id: medicoId })
+  let cliniciansRaw: import('../types/api').UserBrief[] = []
+  try {
+    cliniciansRaw = await clinicalService.listClinicians()
+  } catch {
+    /* optional */
+  }
+  const patients = patientsApi.map(patientFromApi)
+  const appointments = apptsRaw.map(mapAppointmentApi)
+  const specialists = specialistsFromClinicians(cliniciansRaw)
+  const data: import('../types/clinical-domain').DemoClinicalSeed = {
+    demo_users: {},
+    patients,
+    specialists,
+    appointments,
+    studies: [],
+    predictions: [],
+    diagnoses: [],
+  }
   return deriveViewModel(data)
 }

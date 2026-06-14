@@ -2,7 +2,9 @@ export type AppointmentStatus =
   | 'pendiente'
   | 'en_proceso'
   | 'atendido'
+  | 'atendida'
   | 'cancelado'
+  | 'cancelada'
 
 export type PredictionResult = 'positivo' | 'negativo'
 
@@ -24,6 +26,7 @@ export type PatientRecord = {
 export type SpecialistRecord = {
   id: string
   user_id: string
+  usuario_id?: string
   cmp: string
   specialty: string
   display_name: string

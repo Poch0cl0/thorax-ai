@@ -6,11 +6,10 @@ import { RoleGate } from '../components/layout/RoleGate'
 import { DashboardPage } from '../pages/DashboardPage'
 import { LoginPage } from '../pages/LoginPage'
 import { PatientsPage } from '../pages/PatientsPage'
-import { PredictionsPage } from '../pages/PredictionsPage'
-import { StudiesPage } from '../pages/StudiesPage'
 import { AppointmentsPage } from '../pages/AppointmentsPage'
 import { AttendQueuePage } from '../pages/AttendQueuePage'
 import { ScanPage } from '../pages/ScanPage'
+import { RecommendationsPage } from '../pages/RecommendationsPage'
 import { AgendaPage } from '../pages/AgendaPage'
 import { UsersPage } from '../pages/admin/UsersPage'
 import { RolesPage } from '../pages/admin/RolesPage'
@@ -100,6 +99,14 @@ export function AppRoutes() {
               element={
                 <RoleGate allow={['especialista', 'admin']}>
                   <ScanPage />
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/recommendations"
+              element={
+                <RoleGate allow={['especialista', 'admin']}>
+                  <RecommendationsPage />
                 </RoleGate>
               }
             />

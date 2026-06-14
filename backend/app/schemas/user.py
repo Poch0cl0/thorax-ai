@@ -32,5 +32,6 @@ class UserRead(UserBase):
     id: int
     created_at: datetime
     rol: RolRead | None = None
+    medico_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

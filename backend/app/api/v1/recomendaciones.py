@@ -1,10 +1,12 @@
 from pathlib import Path
+import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from datetime import datetime
 
 from app.core.database import get_db
 from app.core.email_service import send_email_with_attachment
@@ -16,7 +18,7 @@ from app.models.email_log import EmailLog
 from app.models.prediccion import Prediccion
 from app.models.recomendacion import Recomendacion
 from app.schemas.email_log import EmailLogRead
-from app.schemas.recomendacion import RecomendacionRead, SendRecommendationEmailRequest
+from app.schemas.recomendacion import RecomendacionRead
 
 router = APIRouter(prefix="/recomendaciones", tags=["recomendaciones"])
 
@@ -68,7 +70,10 @@ async def create_recommendation(prediction_id: int, db: AsyncSession = Depends(g
 @router.post("/{recommendation_id}/send-email", dependencies=[Depends(require_roles(ADMIN_ROLE, DOCTOR_ROLE))])
 async def send_recommendation_email(
     recommendation_id: int,
-    payload: SendRecommendationEmailRequest,
+    email: str | None = Form(None),
+    subject: str = Form("Reporte medico de prediccion"),
+    mensaje: str | None = Form(None),
+    archivo: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     result = await db.execute(
@@ -80,9 +85,21 @@ async def send_recommendation_email(
     if recommendation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
 
-    recipient = payload.email or recommendation.paciente.email
+    recipient = email or recommendation.paciente.email
     if not recipient:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Patient email is not available")
+
+    body = mensaje or recommendation.contenido_recomendacion
+    attachment_path: str | Path | None = recommendation.reporte_pdf_path
+    temp_path: Path | None = None
+
+    if archivo is not None and archivo.filename:
+        suffix = Path(archivo.filename).suffix or ".pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await archivo.read()
+            tmp.write(content)
+            temp_path = Path(tmp.name)
+            attachment_path = temp_path
 
     log = EmailLog(
         recomendacion_id=recommendation.id,
@@ -94,18 +111,24 @@ async def send_recommendation_email(
     try:
         await send_email_with_attachment(
             recipient=recipient,
-            subject=payload.subject,
-            body=recommendation.contenido_recomendacion,
-            attachment_path=recommendation.reporte_pdf_path,
+            subject=subject,
+            body=body,
+            attachment_path=attachment_path,
         )
         log.estado = "enviado"
         recommendation.email_enviado = True
         recommendation.email_enviado_a = recipient
+        recommendation.fecha_envio = datetime.utcnow()
     except Exception as exc:
         log.estado = "error"
         log.mensaje = str(exc)
         await db.commit()
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    finally:
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
 
     await db.commit()
     return {"message": "Email sent"}

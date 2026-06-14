@@ -28,8 +28,10 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 
 
 @router.get("/me", response_model=UserRead)
-async def me(current_user: Usuario = Depends(get_current_user)) -> Usuario:
-    return current_user
+async def me(current_user: Usuario = Depends(get_current_user)) -> UserRead:
+    base = UserRead.model_validate(current_user)
+    medico_id = current_user.medico.id if current_user.medico else None
+    return base.model_copy(update={"medico_id": medico_id})
 
 
 @router.post("/change-password")

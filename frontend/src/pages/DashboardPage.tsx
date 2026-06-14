@@ -54,15 +54,25 @@ function AdminDashboard({ vm }: { vm: any }) {
 }
 
 function SecretariaDashboard({ vm }: { vm: any }) {
+  const now = new Date()
   const upcoming = [...vm.appointments]
-    .filter((a: any) => a.status !== 'cancelado')
+    .filter((a: any) => a.status !== 'cancelada' && a.status !== 'cancelado')
     .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
     .slice(0, 5)
 
+  const pendingToday = vm.appointments.filter((a: any) => {
+    if (a.status !== 'pendiente') return false
+    const t = new Date(a.scheduled_at)
+    return t.toDateString() === now.toDateString()
+  }).length
+
+  const appointmentsThisMonth = vm.appointments.filter((a: any) => {
+    const t = new Date(a.scheduled_at)
+    return t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth()
+  }).length
+
   const patientById = new Map<string, any>()
-  if (vm) {
-    vm.patients.forEach((p: any) => patientById.set(p.id, p))
-  }
+  vm.patients.forEach((p: any) => patientById.set(p.id, p))
   const recent = [...vm.patients].slice(-5).reverse()
 
   return (
@@ -71,13 +81,20 @@ function SecretariaDashboard({ vm }: { vm: any }) {
         <h1 className="text-3xl font-bold tracking-tight text-thorax-text">Dashboard</h1>
         <p className="mt-2 text-sm text-thorax-muted">Gestión de citas y pacientes</p>
       </div>
-      
-      <div className="grid gap-4 sm:grid-cols-2 mb-8">
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Total Pacientes" value={vm.patients.length} icon={Users} />
+        <StatCard label="Citas del Mes" value={appointmentsThisMonth} icon={Calendar} variant="accent" />
+        <StatCard label="Pendientes Hoy" value={pendingToday} icon={Clock} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 mb-4">
         <Link to="/patients" className="flex items-center justify-center gap-2 rounded-xl bg-thorax-bg-deep border border-thorax-accent/30 px-4 py-4 text-center text-sm font-semibold text-thorax-text hover:bg-thorax-card">
           <UserPlus className="h-5 w-5 text-thorax-accent" /> Nuevo Paciente
         </Link>
-        <Link to="/appointments" className="flex items-center justify-center gap-2 rounded-xl bg-thorax-accent px-4 py-4 text-center text-sm font-semibold text-slate-900 shadow hover:bg-thorax-accent-hover">
-          <Calendar className="h-5 w-5" /> Nueva Cita
+        <Link to="/appointments" className="flex items-center justify-center gap-2 rounded-xl bg-thorax-accent px-4 py-4 text-center text-sm font-semibold text-white shadow hover:bg-thorax-accent-hover">
+          <Calendar className="h-5 w-5 shrink-0 text-white" />
+          <span className="text-white">Nueva Cita</span>
         </Link>
       </div>
 
@@ -95,12 +112,15 @@ function SecretariaDashboard({ vm }: { vm: any }) {
                 <li key={a.id} className="flex items-start gap-3 border-b border-thorax-border/60 pb-3 last:border-0 last:pb-0">
                   <Calendar className="mt-0.5 h-4 w-4 text-thorax-accent" />
                   <div>
-                    <p className="font-medium text-thorax-text">{p ? `${p.nombres} ${p.apellidos}` : 'Paciente'}</p>
-                    <p className="text-sm text-thorax-muted">{t.toLocaleString()}</p>
+                    <p className="font-medium text-thorax-text">{p?.full_name ?? 'Paciente'}</p>
+                    <p className="text-sm text-thorax-muted">{t.toLocaleString('es-PE')}</p>
                   </div>
                 </li>
               )
             })}
+            {upcoming.length === 0 && (
+              <p className="text-sm text-thorax-muted">No hay citas próximas.</p>
+            )}
           </ul>
         </div>
         <div className="rounded-xl border border-thorax-border bg-thorax-card p-6">
@@ -112,8 +132,8 @@ function SecretariaDashboard({ vm }: { vm: any }) {
               <li key={p.id} className="flex items-start gap-3 border-b border-thorax-border/60 pb-3 last:border-0 last:pb-0">
                 <Users className="mt-0.5 h-4 w-4 text-thorax-accent" />
                 <div>
-                  <p className="font-medium text-thorax-text">{p.nombres} {p.apellidos}</p>
-                  <p className="text-sm text-thorax-muted">{p.dni}</p>
+                  <p className="font-medium text-thorax-text">{p.full_name}</p>
+                  <p className="text-sm text-thorax-muted">{p.dni ?? '—'}</p>
                 </div>
               </li>
             ))}
@@ -125,7 +145,12 @@ function SecretariaDashboard({ vm }: { vm: any }) {
 }
 
 function MedicoDashboard({ vm }: { vm: any }) {
-  const pending = vm.appointments.filter((a: any) => a.status === 'programada' || a.status === 'pendiente').slice(0, 5)
+  const { user } = useAuth()
+  const medicoId = user?.medico_id
+  const myAppointments = medicoId
+    ? vm.appointments.filter((a: any) => !a.specialist_id || Number.parseInt(a.specialist_id, 10) === medicoId)
+    : vm.appointments
+  const pending = myAppointments.filter((a: any) => a.status === 'pendiente').slice(0, 5)
   const patientById = new Map(vm.patients.map((p: any) => [p.id, p]))
 
   return (
@@ -137,8 +162,8 @@ function MedicoDashboard({ vm }: { vm: any }) {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Citas Pendientes" value={pending.length} icon={Clock} variant="accent" />
-        <StatCard label="Pacientes Atendidos" value={vm.patients.length} icon={Users} />
-        <StatCard label="Alertas de Riesgo" value={vm.predictions.filter((p: any) => p.risk_level === 'Alto').length} icon={AlertCircle} variant="danger" />
+        <StatCard label="Mis Pacientes" value={vm.patients.length} icon={Users} />
+        <StatCard label="Alertas de Riesgo" value={vm.predictions.filter((p: any) => p.risk_level === 'Alto' || p.details?.nivel_riesgo === 'alto').length} icon={AlertCircle} variant="danger" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_minmax(0,1fr)]">
@@ -149,11 +174,11 @@ function MedicoDashboard({ vm }: { vm: any }) {
           </div>
           <ul className="space-y-4">
             {pending.map((a: any) => {
-              const p = patientById.get(a.patient_id)
+              const p = patientById.get(a.patient_id) as { full_name?: string; dni?: string } | undefined
               return (
                 <li key={a.id} className="flex items-center justify-between rounded-xl border border-thorax-border bg-thorax-bg-deep p-4">
                   <div>
-                    <p className="font-semibold text-thorax-text">{p ? `${p.nombres} ${p.apellidos}` : 'Paciente'}</p>
+                    <p className="font-semibold text-thorax-text">{p?.full_name ?? 'Paciente'}</p>
                     <p className="mt-1 text-xs text-thorax-muted">
                       DNI: {p?.dni ?? '—'} | {new Date(a.scheduled_at).toLocaleTimeString()}
                     </p>

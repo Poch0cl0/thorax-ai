@@ -7,6 +7,7 @@ export function RolesPage() {
   const [roles, setRoles] = useState<any[]>([])
   const [permissions, setPermissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   
   const [showModal, setShowModal] = useState(false)
   const [formData, setFormData] = useState({ nombre: '', descripcion: '' })
@@ -15,6 +16,7 @@ export function RolesPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(null)
     try {
       const [rData, pData] = await Promise.all([
         adminService.listRoles(),
@@ -24,6 +26,7 @@ export function RolesPage() {
       setPermissions(pData)
     } catch (e) {
       console.error(e)
+      setLoadError(e instanceof Error ? e.message : 'No se pudieron cargar roles. Verifique permisos de administrador.')
     } finally {
       setLoading(false)
     }
@@ -73,6 +76,10 @@ export function RolesPage() {
         </button>
       </div>
 
+      {loadError && (
+        <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{loadError}</p>
+      )}
+
       {loading ? (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-thorax-accent" />
@@ -100,7 +107,7 @@ export function RolesPage() {
                     {rol.permisos.map((p: any) => (
                       <AppBadge key={p.id} variant="neutral" className="inline-flex items-center gap-1 border border-thorax-border">
                         <Key className="h-3 w-3" />
-                        {p.nombre}
+                        {p.codigo}
                       </AppBadge>
                     ))}
                   </div>
@@ -176,7 +183,7 @@ export function RolesPage() {
                       className="mt-1 h-4 w-4 rounded border-thorax-border text-thorax-accent focus:ring-thorax-accent bg-thorax-bg-deep"
                     />
                     <div>
-                      <p className="text-sm font-medium text-thorax-text">{p.nombre}</p>
+                      <p className="text-sm font-medium text-thorax-text">{p.codigo}</p>
                       <p className="text-xs text-thorax-muted mt-1">{p.descripcion}</p>
                     </div>
                   </label>

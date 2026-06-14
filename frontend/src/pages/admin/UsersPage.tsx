@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { Users, Loader2, Plus, X, Edit, Trash2 } from 'lucide-react'
 import * as adminService from '../../services/adminService'
 import { AppBadge } from '../../components/ui/AppBadge'
+import { isDoctorRoleName } from '../../services/clinicalRepository'
 
 export function UsersPage() {
   const [users, setUsers] = useState<any[]>([])
   const [roles, setRoles] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState({
@@ -23,6 +25,7 @@ export function UsersPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(null)
     try {
       const [uData, rData] = await Promise.all([
         adminService.listUsers(),
@@ -33,6 +36,7 @@ export function UsersPage() {
       if (rData.length > 0) setFormData(f => ({ ...f, rol_id: rData[0].id }))
     } catch (e) {
       console.error(e)
+      setLoadError(e instanceof Error ? e.message : 'No se pudieron cargar usuarios. Verifique permisos de administrador.')
     } finally {
       setLoading(false)
     }
@@ -97,7 +101,7 @@ export function UsersPage() {
     setShowModal(true)
   }
 
-  const isMedico = roles.find(r => r.id === formData.rol_id)?.nombre === 'especialista'
+  const isMedico = isDoctorRoleName(roles.find(r => r.id === formData.rol_id)?.nombre)
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -115,6 +119,10 @@ export function UsersPage() {
         </button>
       </div>
 
+      {loadError && (
+        <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{loadError}</p>
+      )}
+
       {loading ? (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-thorax-accent" />
@@ -127,6 +135,7 @@ export function UsersPage() {
                 <th className="px-6 py-4 font-semibold">Usuario</th>
                 <th className="px-6 py-4 font-semibold">Username</th>
                 <th className="px-6 py-4 font-semibold">Email</th>
+                <th className="px-6 py-4 font-semibold">Rol</th>
                 <th className="px-6 py-4 font-semibold">Estado</th>
                 <th className="px-6 py-4 font-semibold text-right">Acciones</th>
               </tr>
@@ -144,6 +153,9 @@ export function UsersPage() {
                   </td>
                   <td className="px-6 py-4 text-thorax-muted">{u.username}</td>
                   <td className="px-6 py-4 text-thorax-muted">{u.email}</td>
+                  <td className="px-6 py-4">
+                    <AppBadge variant="neutral">{u.rol?.nombre?.toUpperCase() ?? '—'}</AppBadge>
+                  </td>
                   <td className="px-6 py-4">
                     {u.activo ? (
                       <AppBadge variant="success">Activo</AppBadge>

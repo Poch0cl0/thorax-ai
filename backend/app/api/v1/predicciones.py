@@ -4,14 +4,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.file_storage import file_storage
+from app.core.medico_scope import is_doctor, require_medico_id
 from app.core.modelos_ia.load import predict
 from app.core.modelos_ia.preprocess import preprocess_radiografia
 from app.core.permisos import ADMIN_ROLE, DOCTOR_ROLE
-from app.dependencies import require_roles
+from app.dependencies import get_current_user, require_roles
 from app.models.dato_clinico import DatoClinico
 from app.models.medico import Medico
 from app.models.paciente import Paciente
 from app.models.prediccion import Prediccion
+from app.models.usuario import Usuario
 from app.schemas.prediccion import PrediccionRead
 
 router = APIRouter(prefix="/predicciones", tags=["predicciones"])
@@ -57,14 +59,21 @@ async def list_predictions(
 @router.post("", response_model=PrediccionRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_roles(ADMIN_ROLE, DOCTOR_ROLE))])
 async def create_prediction(
     paciente_id: int = Form(...),
-    medico_id: int = Form(...),
+    medico_id: int | None = Form(None),
     modelo: str = Form("lr"),
     datos_clinicos_id: int | None = Form(None),
     cita_id: int | None = Form(None),
     radiografia: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
 ) -> Prediccion:
-    await _validate_prediction_references(db, paciente_id, medico_id, datos_clinicos_id)
+    effective_medico_id = medico_id
+    if is_doctor(current_user):
+        effective_medico_id = await require_medico_id(db, current_user)
+    elif effective_medico_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="medico_id is required")
+
+    await _validate_prediction_references(db, paciente_id, effective_medico_id, datos_clinicos_id)
 
     try:
         original_path = await file_storage.save_upload(radiografia)
@@ -78,7 +87,7 @@ async def create_prediction(
 
     prediction = Prediccion(
         paciente_id=paciente_id,
-        medico_id=medico_id,
+        medico_id=effective_medico_id,
         datos_clinicos_id=datos_clinicos_id,
         cita_id=cita_id,
         modelo_utilizado=modelo.lower(),

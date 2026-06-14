@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.permisos import ADMIN_ROLE, DOCTOR_ROLE
+from app.core.permisos import ADMIN_ROLE, DOCTOR_ROLE, normalize_role
 from app.core.security import get_password_hash
 from app.dependencies import require_roles
 from app.models.medico import Medico
@@ -16,7 +17,9 @@ router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
 @router.get("", response_model=list[UserRead], dependencies=[Depends(require_roles(ADMIN_ROLE))])
 async def list_users(db: AsyncSession = Depends(get_db)) -> list[Usuario]:
-    result = await db.execute(select(Usuario).order_by(Usuario.id))
+    result = await db.execute(
+        select(Usuario).options(selectinload(Usuario.rol)).order_by(Usuario.id)
+    )
     return list(result.scalars().all())
 
 
@@ -27,7 +30,7 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)) -
     await db.flush()
 
     role = await db.get(Rol, payload.rol_id)
-    if role and role.nombre == DOCTOR_ROLE:
+    if role and normalize_role(role.nombre) == DOCTOR_ROLE:
         existing = await db.execute(select(Medico).where(Medico.usuario_id == user.id))
         if existing.scalar_one_or_none() is None:
             db.add(Medico(
@@ -43,7 +46,10 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)) -
 
 @router.get("/{user_id}", response_model=UserRead, dependencies=[Depends(require_roles(ADMIN_ROLE))])
 async def get_user(user_id: int, db: AsyncSession = Depends(get_db)) -> Usuario:
-    user = await db.get(Usuario, user_id)
+    result = await db.execute(
+        select(Usuario).options(selectinload(Usuario.rol)).where(Usuario.id == user_id)
+    )
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user

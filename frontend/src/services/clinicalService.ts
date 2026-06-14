@@ -1,5 +1,4 @@
 import type { ModelsInfo,
-  AppointmentApi,
   Patient,
   Prediction, ScanResult,
   Study,
@@ -12,8 +11,15 @@ function mapPatient(p: any): Patient {
   return p as Patient
 }
 
-export async function listPatients(): Promise<Patient[]> {
-  const data = await apiFetch<any[]>('/api/v1/pacientes')
+export async function listPatients(params?: {
+  medico_id?: number
+  con_datos_clinicos?: boolean
+}): Promise<Patient[]> {
+  const q = new URLSearchParams()
+  if (params?.medico_id) q.set('medico_id', String(params.medico_id))
+  if (params?.con_datos_clinicos) q.set('con_datos_clinicos', 'true')
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  const data = await apiFetch<any[]>(`/api/v1/pacientes${qs}`)
   return data.map(mapPatient)
 }
 
@@ -59,14 +65,14 @@ export async function deletePatient(id: number): Promise<void> {
   })
 }
 
-type AppointmentApi = {
-  id: string
-  patient_id: string
-  attending_user_id: string | null
+export type MappedAppointment = {
+  id: number
+  patient_id: number
+  attending_user_id: number | null
   scheduled_at: string
   status: string
   notes: string | null
-  created_by_id: string | null
+  created_by_id: number | null
   created_at: string
   updated_at: string
   predicciones?: any[]
@@ -75,16 +81,23 @@ type AppointmentApi = {
 // ... in listAppointments
 export async function listClinicians(): Promise<UserBrief[]> {
   const data = await apiFetch<any[]>('/api/v1/medicos')
-  return data.map(m => ({
+  return data.map((m) => ({
     id: m.id,
-    email: m.email || '',
-    full_name: `${m.nombres} ${m.apellidos}`.trim(),
-    roles: ['clinician'],
+    usuario_id: m.usuario_id ?? m.usuario?.id,
+    email: m.usuario?.email ?? m.email ?? '',
+    full_name: (m.usuario?.nombre_completo ?? `${m.nombres ?? ''} ${m.apellidos ?? ''}`.trim()) || 'Médico',
+    cmp: m.cmp ?? null,
+    roles: ['medico'],
   }))
 }
 
+export async function getPatient(id: number): Promise<Patient> {
+  const res = await apiFetch<any>(`/api/v1/pacientes/${id}`)
+  return mapPatient(res)
+}
+
 // Cita -> AppointmentApi
-function mapAppointment(c: any): AppointmentApi {
+function mapAppointment(c: any): MappedAppointment {
   return {
     id: c.id,
     patient_id: c.paciente_id,
@@ -99,12 +112,29 @@ function mapAppointment(c: any): AppointmentApi {
   }
 }
 
-export async function listAppointments(_params?: {
-  scheduled_from?: string
-  scheduled_to?: string
-}): Promise<AppointmentApi[]> {
-  const data = await apiFetch<any[]>('/api/v1/citas')
+export async function listAppointments(params?: {
+  medico_id?: number
+  estado?: string
+  paciente_id?: number
+}): Promise<MappedAppointment[]> {
+  const q = new URLSearchParams()
+  if (params?.medico_id) q.set('medico_id', String(params.medico_id))
+  if (params?.estado) q.set('estado', params.estado)
+  if (params?.paciente_id) q.set('paciente_id', String(params.paciente_id))
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  const data = await apiFetch<any[]>(`/api/v1/citas${qs}`)
   return data.map(mapAppointment)
+}
+
+export async function listClinicalData(params?: {
+  paciente_id?: number
+  cita_id?: number
+}): Promise<any[]> {
+  const q = new URLSearchParams()
+  if (params?.paciente_id) q.set('paciente_id', String(params.paciente_id))
+  if (params?.cita_id) q.set('cita_id', String(params.cita_id))
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return apiFetch<any[]>(`/api/v1/datos-clinicos${qs}`)
 }
 
 export async function createAppointment(body: {
@@ -113,12 +143,15 @@ export async function createAppointment(body: {
   scheduled_at: string
   notes?: string | null
   status?: string
-}): Promise<AppointmentApi> {
+  disponibilidad_id?: number | null
+}): Promise<MappedAppointment> {
   const payload = {
     paciente_id: body.patient_id,
     medico_id: body.attending_user_id,
     fecha_cita: body.scheduled_at,
-    observaciones: body.notes || null,
+    motivo_consulta: body.notes || null,
+    observaciones: null,
+    disponibilidad_id: body.disponibilidad_id ?? null,
   }
   const res = await apiFetch<any>('/api/v1/citas', {
     method: 'POST',
@@ -135,13 +168,15 @@ export async function updateAppointment(
     scheduled_at: string
     notes: string | null
     status: string
+    disponibilidad_id: number | null
   }>,
-): Promise<AppointmentApi> {
+): Promise<MappedAppointment> {
   const payload: any = {}
   if (body.attending_user_id !== undefined) payload.medico_id = body.attending_user_id
   if (body.scheduled_at !== undefined) payload.fecha_cita = body.scheduled_at
   if (body.status !== undefined) payload.estado = body.status
-  if (body.notes !== undefined) payload.observaciones = body.notes
+  if (body.notes !== undefined) payload.motivo_consulta = body.notes
+  if (body.disponibilidad_id !== undefined) payload.disponibilidad_id = body.disponibilidad_id
 
   const res = await apiFetch<any>(`/api/v1/citas/${id}`, {
     method: 'PATCH',
@@ -161,15 +196,20 @@ export async function deleteAppointment(id: number): Promise<void> {
 function mapPrediction(p: any): Prediction {
   return {
     id: p.id,
-    study_id: p.id, // Mock study id to match frontend expectation
+    study_id: p.id,
     created_by_id: p.medico_id,
     model_version: p.modelo_utilizado,
     risk_score: p.probabilidad,
     finding_label: p.clase_predicha,
+    disease_class: p.clase_predicha,
+    clase_predicha: p.clase_predicha,
+    probabilidad: p.probabilidad,
+    nivel_riesgo: p.nivel_riesgo,
     details: {
       nivel_riesgo: p.nivel_riesgo,
+      risk_level: p.nivel_riesgo,
       imagen_procesada_path: p.imagen_procesada_path,
-      imagen_original_path: p.imagen_original_path
+      imagen_original_path: p.imagen_original_path,
     },
     created_at: p.fecha_prediccion,
   }
@@ -208,16 +248,19 @@ export async function createStudyWithImage(_body: {
 // NUEVA FUNCIÓN PARA REEMPLAZAR EL FLUJO EN DOS PASOS:
 export async function createPredictionDirectly(body: {
   patient_id: number
-  medico_id: number
+  medico_id?: number
   cita_id?: number
-  model_type: string
+  datos_clinicos_id?: number
+  model_type?: string
   file: File
 }): Promise<Prediction> {
   const fd = new FormData()
   fd.set('paciente_id', String(body.patient_id))
-  fd.set('medico_id', String(body.medico_id))
+  if (body.medico_id) fd.set('medico_id', String(body.medico_id))
   if (body.cita_id) fd.set('cita_id', String(body.cita_id))
-  fd.set('modelo', body.model_type === 'random_forest' ? 'rf' : 'lr')
+  if (body.datos_clinicos_id) fd.set('datos_clinicos_id', String(body.datos_clinicos_id))
+  const model = body.model_type ?? 'lr'
+  fd.set('modelo', model === 'random_forest' || model === 'rf' ? 'rf' : 'lr')
   fd.set('radiografia', body.file)
 
   const p = await apiFetch<any>('/api/v1/predicciones', {
@@ -234,8 +277,10 @@ export async function sendAiDiagnosis(predictionId: number): Promise<void> {
   })
   
   // Then send it by email
-  await apiFetch(`/api/v1/recomendaciones/${rec.id}/enviar-email`, {
-    method: 'POST'
+  await apiFetch(`/api/v1/recomendaciones/${rec.id}/send-email`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    headers: { 'Content-Type': 'application/json' },
   })
 }
 
